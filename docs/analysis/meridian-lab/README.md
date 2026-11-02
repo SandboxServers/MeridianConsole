@@ -310,6 +310,13 @@ A full MCP lab daemon that lets a Claude session take hold of every real piece o
 | D-ML150 | `stack_up` creates every C10 proxy except L41's (F129). The `Packet` column in `ProxyCatalog` names the packet that first needs a row, not the one that creates it. `LabStack.UpAsync` creates and registers `ProxyCatalog.StackProxies` (every row except L41's). L41 makes `agent-ingress-tls` live with the Gateway's 8443 listener; creation is idempotent (409 is success). A proxy whose upstream is not running is harmless. Amends the L08 spec. | Accepted (architect) | [docker-run-12 ruling](worknotes/docker-run-12-ruling.md) section 2. |
 | D-ML151 | A readiness timeout explains itself, and Docker tests print the logs before teardown (F130). `LabServices.WaitReadyAsync` names failing checks from the ServiceDefaults `"checks"` object (names only, R-LOG) and appends the container state (`<status> <exit code>`, accepted only when it matches `^[a-z]+ -?\d+$`, else `unknown`). Every Docker test that starts services writes a redacted log tail per started service in `finally`, before `StopAsync` or `DownAsync`, each line through `SensitiveText.Redact` on top of the ring's vault redaction. | Accepted (architect) | [docker-run-12 ruling](worknotes/docker-run-12-ruling.md) section 2. |
 | D-ML152 | The lab Identity runs Identity's existing development-certificate path (`Auth:UseDevelopmentCertificates=true`) with an empty `Auth:KeyVault:VaultUri`, set only in `IdentityLabAdapter` (not in `OverlayKeys`); no product change, no Key Vault stub. | Accepted (architect) | F131; [l34 ruling 2](worknotes/l34-ruling-2.md) section 3. |
+| D-ML153 | A dispatch runs at most 4 packet-coders. Inside a parallel batch, packet checks and reviewer re-runs use the packet's scoped `FullyQualifiedName~` filter only; the full non-Docker Lab suite runs once, serially, on the campaign tip after the batch merges, and a red there gets a fix packet. | Accepted (architect) | Parallel testhosts gave 32 spurious loopback failures; [next-batch plan](worknotes/next-batch-plan.md) section 2. |
+| D-ML154 | KG-W7-1 moves from L35 into L35m: `db_query` masks by base column (table OID and attribute number), so an alias cannot bypass it; in `identity` and `betterauth` a string-typed expression column is masked too. | Accepted (architect) | KG-W7-1; [next-batch plan](worknotes/next-batch-plan.md) 7.3. |
+| D-ML155 | L54b: a `RunningMutantBuild` mark from a mutant's build until a successful plain restore; bundles stamp `build.mutant`; the flake check refuses a mutant source and refuses while a mark is set; every lab `Process` builder strips the token; unprefixed `---`/`+++` headers are refused. | Accepted (architect) | F122, H3, H4, D-ML141; [next-batch plan](worknotes/next-batch-plan.md) 7.2. |
+| D-ML156 | L29b: soak ends `weak` with a `reason` on 1-2 loops, too few I7 samples or I7 `skipped`; chaos with zero successful workload loops fails; `soak_run` loads the spec and runs `RowFilterCheck` before the job starts. | Accepted (architect) | D-ML112, KG-W5-2, KG-W5-20; [next-batch plan](worknotes/next-batch-plan.md) 7.1. |
+| D-ML157 | The W8 note's rulings for L39-L44 (no Agent.Core change in L39; hub events 4101 and 4102; allowlist key `AgentIngress:ClientCertificateMode`; only the lab TLS CA in Root; `services.Replace` after `AddAgentCore()`). | Accepted (architect) | [W8 deltas](worknotes/W8-sprint2-deltas.md). |
+| D-ML158 | L62 waits for L27e, L29b and L52b, though its listed dependencies are met: before L52b the coverage kinds it weights are `not_collected`. | Accepted (architect) | D-ML99, KG-W5-3. |
+| D-ML159 | L37 runs after L54b; both edit `Build/LabBuilder.cs`. | Accepted (architect) | [next-batch plan](worknotes/next-batch-plan.md) section 2. |
 
 ## Seam tests
 
@@ -338,7 +345,7 @@ S-L4 (the elevated helper pipe) is dropped with D-ML12.
 
 | Packet | Wave | Title | Depends on | Security review | Status |
 | --- | --- | --- | --- | --- | --- |
-| L00 | 0 | Spike: Windows containers on this host (no code; worknote) | - | no | Parked (owner: Windows containers off for now; wave 6 waits) |
+| L00 | 0 | Spike: Windows containers on this host (no code; worknote) | - | no | BlockedDecision (owner, D-ML37/D-ML38: Windows containers off for now; wave 6 waits) |
 | L01 | 1 | Scaffold projects, packages, isolation test, seam stubs, red S-L1/S-L2 | - | yes | Integrated |
 | L02 | 1 | Daemon edge: loopback Kestrel, token, Host/Origin, mutex, `/status`, CLI | L01 | yes | Integrated |
 | L03 | 1 | `LeaseBook`, sweeper, history, `lab.lease` events | L01 | yes | Integrated |
@@ -399,7 +406,7 @@ S-L4 (the elevated helper pipe) is dropped with D-ML12.
 | wave5-fix-F | 5 | Wave 5 Docker-run fixes: hunter lease only on non-Open tools, `LabRestartExcuses` (I6 excuses for lab `svc_start`/`stack_up`), `LabHosts.IsDaemonEndpoint` ([wf-f](worknotes/wf-f.md), `1b8506e3`) | wave5-fix-E | yes | Integrated (merged `2c297653`; reviewed in the fixFGH loop: review-3 `ship`, security-2 `ship`, merged `f5f8cdc5`) |
 | wave5-fix-G | 5 | `lease_id` in `MutationDockerTests` arguments; the recovery daemon-endpoint guard (`LabHosts.IsDaemonEndpoint`) ([wf-g](worknotes/wf-g.md)) | wave5-fix-F | yes | Integrated (merged `fa57cd19`; reviewed in the fixFGH loop, merged `f5f8cdc5`) |
 | wave5-fix-H | 5E | Boundary Docker fixes: M1 state literal, recovery child repo root, recovery I5 judge (diagnosis first), twin proxy args (diagnosis first), coverage description (D-ML105, D-ML106, D-ML110, D-ML111) | wave5-fix-G | yes | Integrated (merged `87d63e80`; H2-H5 green live, KG-W5-7/8 not hit, [wf-h](worknotes/wf-h.md); reviewed in the fixFGH loop, merged `f5f8cdc5`) |
-| L29b | 5 (follow-up) | Soak strength: fewer than three loops or too few I7 samples ends `weak`, never pass (D-ML112); soak `rows` checked by `RowFilterCheck` before the first loop; chaos with zero workload loops or all loops errored never passes (KG-W5-20, D-ML141) | wave 5 close (met, D-ML142) | no | BlockedDependency (outline; architect specs steps before dispatch) |
+| L29b | 5 (follow-up) | Soak strength: fewer than three loops or too few I7 samples ends `weak`, never pass (D-ML112); soak `rows` checked by `RowFilterCheck` before the first loop; chaos with zero workload loops or all loops errored never passes (KG-W5-20, D-ML141) | wave 5 close (met, D-ML142) | no | Ready ([next-batch plan](worknotes/next-batch-plan.md) 7.1, D-ML156; batch 1) |
 | L55b | 5E (follow-up) | Recovery after restart: rehydrate credential refs or stack state; the recovery judge reads Toxiproxy (D-ML113) | wave 5 close (met, D-ML142); before the wave 10 gate LS | yes | BlockedDependency (outline; architect specs steps before dispatch) |
 | wave5-fix-R7 R7-1 | 5E | History enroll body in the product wire shape, `LabWireJson`, seam S-L2h (`ml/wf-r7-history-body`) | run 7 | yes | Merged (`62ce8be2`); run 8: M1 and M4 `detected` ([run 7 diagnosis](worknotes/wave5-run7-diagnosis.md)) |
 | wave5-fix-R7 R7-2 | 5E | `git -c core.longpaths=true` for mutant and self-check patch apply (`ml/wf-r7-mutant-longpath`) | run 7 | yes | Merged (`62ce8be2`); run 8: M1 built and `detected` under the scratchpad home |
@@ -415,7 +422,7 @@ S-L4 (the elevated helper pipe) is dropped with D-ML12.
 | L27d | 5 (follow-up) | Cut-window I1 excuse covers `EnrollAgain` as `Enroll`; fake cut 500s queue an I1 (F125) (`ml/l27d-hunt-enrollagain-excuse`, worktree `ml-l27d`) | wave 5 close (D-ML142); before the campaign review | yes | Ready ([close ruling](worknotes/wave5-close-ruling.md) 6.1) |
 | L27e | 5 (follow-up) | Seeded, count-bounded hunt sample; deterministic greedy shrink; `cases_run`, `shrink_cases`, `budget_hit` (F124, D-ML143) (`ml/l27e-hunt-seeded-sample`, worktree `ml-l27e`) | L27d merged; before the campaign review and the campaign PR | yes | BlockedDependency (L27d; [close ruling](worknotes/wave5-close-ruling.md) 6.2) |
 | wave5-fix-R11 R11-1 | 5 | Boundary pass 4 fixes: every top-level shipped spec registry-validated (R1-N1), honest `--port` docs (R3-N1, D-ML139), `enroll-probe.toml` in the README, flake check `rows` bounded with no echo (H1), capped and caught repro read (H2) (`ml/wf-r11-boundary4-fixes`, worktree `ml-wf-r11-boundary4`) | boundary review pass 4 | yes | Integrated (`a5ef7fed`, merged `7351c6f7`; ruling check review-1 `ship`, security-1 `ship`); run 11 confirmed ([close ruling](worknotes/wave5-close-ruling.md)) |
-| L54b | 5E (follow-up) | Detector bundles stamped with the mutant build; flake check refuses a mutant source (F122); `LabBuilder.RunAsync` strips `MERIDIAN_LAB_TOKEN` (H3); `TryReadDiffGitPath` requires `a/` and `b/` (H4) (D-ML141) | wave 5 close (met, D-ML142); before the wave 10 gates | yes | BlockedDependency (outline, [run 10 ruling](worknotes/wave5-run10-ruling.md) 7.3; architect specs steps before dispatch) |
+| L54b | 5E (follow-up) | Detector bundles stamped with the mutant build; flake check refuses a mutant source (F122); `LabBuilder.RunAsync` strips `MERIDIAN_LAB_TOKEN` (H3); `TryReadDiffGitPath` requires `a/` and `b/` (H4) (D-ML141) | wave 5 close (met, D-ML142); before the wave 10 gates | yes | Ready ([next-batch plan](worknotes/next-batch-plan.md) 7.2, D-ML155; batch 1; before L37, D-ML159) |
 | NR-1 | product (outside the waves) | Nodes EF retry: a retrying strategy with a pool clear, and `ReserveAsync` inside the strategy (D-ML128, D-ML132). A **separate PR to `main`**, branched off `origin/main` (`fix/nodes-ef-retry`, worktree `nr1-nodes-ef-retry`). | none (can start now; no Docker) | yes: one `security-advisor` pass (D-ML132), no label | Merged to main (#256, d3406570) and into the campaign (8191eb8f); section 4.6 scratch green not run; tip green via L19n (D-ML144): run 13 S-L15 green |
 | L19n | 5 (follow-up) | Seam S-L15: the first enroll after an idle Postgres cut answers 401. Recorded red, then green with NR-1 (`ml/l19n`, worktree `ml-l19n`) | confirmation run (D-ML130; met, D-ML142) | no (test only) | Merged (`ab7a0116`, with L19o and the fix pass; review 3 `ship`); run 13: red on scratch accepted, green genuine (D-ML144) |
 | L19o | 5 (follow-up) | S-L15 and S-L7 probe the nodes-postgres listener in-network with pg_isready (F128, D-ML149) (ml/l19n, worktree ml-l19n) | S-L15, S-L7 | no | Merged with L19n (`ab7a0116`); run 13: S-L15 red/green and S-L7 passed in-network |
@@ -428,14 +435,15 @@ S-L4 (the elevated helper pipe) is dropped with D-ML12.
 | L34 | 7 | Identity, BetterAuth and Panel in the lab; red S-L9 | L22 | yes | Merged (`a4a69e6a`, with L34b and L34c; reviews and security `ship`; [l34 ruling 1](worknotes/l34-ruling-1.md), D-ML146, D-ML152) |
 | L34b | 7 (follow-up) | merge tip with L08b; AuthStack prints service log tails (F129, F130) (ml/l34) | AuthStack Docker | no | Merged with L34 (`a4a69e6a`) |
 | L34c | 7 (follow-up) | Lab Identity on development certificates with an empty VaultUri; D-ML144→D-ML146 rename on ml/l34 (F131, D-ML152) | L34b | yes (short) | Merged with L34 (`a4a69e6a`); run 14: AuthStack passed at `f599f371` |
-| L35 | 7 | Playwright .NET, `ui_flow_*` tools, flows; S-L9 green | L34 | yes | BlockedDependency |
+| L35 | 7 | Playwright .NET, `ui_flow_*` tools, flows; S-L9 green (the `db_query` masking moved to L35m, D-ML154) | L34, L35m | yes | Ready after L35m (Docker plus network) |
+| L35m | 7 (split from L35) | `db_query` masks token columns by base column, aliases and expressions included (KG-W7-1, D-ML154) (`ml/l35m-dbquery-mask`, worktree `ml-l35m`) | L34 | yes | Ready ([next-batch plan](worknotes/next-batch-plan.md) 7.3; Docker) |
 | L36 | 7 | Notifications, Discord, webhook sink | L22, L12 | yes | Merged (`fdebb5e1`, with L36b; review 2 `ship`; [l36 ruling 1](worknotes/l36-ruling-1.md), D-ML147, D-ML148); run 13: Notify passed |
 | L36b | 7 (follow-up) | merge tip with L08b; Notify prints service log tails (F129, F130) (ml/l36) | Notify Docker | no | Merged with L36 (`fdebb5e1`) |
-| Tip review 1 | 5-7 (boundary) | Campaign tip review after the L21g, L08b, L30, L19n, L34 and L36 merges (`.claude/reports/meridian-lab/wave5-tip-review-1.md`) | tip `fdebb5e1` | n/a (packet-reviewer pass) | In review |
-| L37 | 7 | CLI in a Linux member | L30, L34 | yes | BlockedDependency |
+| Tip review 1 | 5-7 (boundary) | Campaign tip review after the L21g, L08b, L30, L19n, L34 and L36 merges (`.claude/reports/meridian-lab/wave5-tip-review-1.md`) | tip `fdebb5e1` | n/a (packet-reviewer pass) | Done (pass 3 `ship` at `143b5b02`; fixes `90efff87`, `143b5b02`) |
+| L37 | 7 | CLI in a Linux member | L30, L34; after L54b (D-ML159) | yes | Ready after L54b |
 | L38 | 7 | Catalogs for Identity, BetterAuth, Panel, Notifications, Discord, CLI; coverage flips | L35, L36, L37 | yes | BlockedDependency |
 | L56 | 7 | Tenant isolation twins; M2, M3, M7; S-L12 green | L35, L53, L54, L11 | yes | BlockedDependency |
-| L39 | 8 | Agent consumes `AgentWindowsFootprint`; S-L3 stays green | W8 ruling note | yes | BlockedDependency |
+| L39 | 8 | Agent consumes `AgentWindowsFootprint`; S-L3 stays green | W8 ruling note ([written](worknotes/W8-sprint2-deltas.md), D-ML157) | yes | Ready (batch 1; [next-batch plan](worknotes/next-batch-plan.md) 7.4) |
 | L40 | 8 | `GraceUntil` confirm, hub events, `hub` and `agent_log` sources | W8 ruling note, L32 | yes | BlockedDependency |
 | L41 | 8 | Lab Gateway TLS and mTLS; trust inside members (D-ML14) | L40 | yes | BlockedDependency |
 | L42 | 8 | Fleet simulator on real `Agent.Core`; S-L10 | L41, L27 | yes | BlockedDependency |
@@ -446,7 +454,7 @@ S-L4 (the elevated helper pipe) is dropped with D-ML12.
 | L59 | 9 | Gameplay continuity with a synthetic game; `agent_kill` | L43, L33 | yes | BlockedDependency |
 | L60 | 9 | Baselines and mixed-version pairs; S-L14 | L54, L43 | yes | BlockedDependency |
 | L61 | 9 | Time rows: resurrection, interrupted migration, rollback | L60, L58 | yes | BlockedDependency |
-| L62 | 9 | Guided mode and its A/B | L52, L29, L27 | yes | BlockedDependency |
+| L62 | 9 | Guided mode and its A/B | L52, L29, L27 (met); sequenced after L27e, L29b, L52b (D-ML158) | yes | BlockedDependency (L27e, L29b, L52b) |
 | L45 | 10 | Docs: ADR, guides, catalog and triage guides, threat model | L44, L38, L55-L62 | security-advisor read | BlockedDependency |
 | L46 | 10 | Live runs by the UAT runner agent; evidence to `worknotes/` | L45 | n/a | BlockedDependency |
 | L47 | 10 | Close-out | campaign review, L46 | security-advisor read | BlockedDependency |
@@ -533,18 +541,19 @@ Wave 5 boundary, from [ruling wave5-2](worknotes/wave5-ruling-2.md). A condition
 - KG-W5-16, -15 and -7 (for 5E) closed, and KG-W5-18 closed for new ingests.
 - Two lab defects in the hunter are parked: F124 as KG-W5-21, and F125 inside KG-W5-13. Their fixes are L27d and then L27e, which come before the campaign review.
 
-**Wave boundary after the wave 5 follow-ups and wave 7's first half (2026-11-02):** campaign tip `fdebb5e1`.
+**Wave boundary after the wave 5 follow-ups and wave 7's first half (2026-11-02):** campaign tip `143b5b02` (was `fdebb5e1` before tip review 1's fixes).
 
 - NR-1 merged to `main` (#256) and into the campaign with `main` at `8191eb8f`.
 - Merged into the campaign: L21g (`a0935402`, KG-W5-22 closed), L08b (`a49c1786`), L30 (`cdc8c73b`), L19n with L19o (`ab7a0116`), L34 with L34b and L34c (`a4a69e6a`), L36 with L36b (`fdebb5e1`).
 - Docker run 13: S-L15 red on scratch accepted and green genuine (D-ML144), S-L7 passed in-network, Notify passed, AuthStack red (F131). Run 14: AuthStack passed at `f599f371` after L34c. KG-W5-17, KG-W5-23 and KG-W7-4 closed.
-- Tip review 1 is running. F132 (Identity accepts the development-certificate switch in Production) is an Identity backlog follow-up, not a campaign packet.
+- Tip review 1 closed `ship` on pass 3 at `143b5b02` (fixes `90efff87`, `143b5b02`). F132 (Identity accepts the development-certificate switch in Production) is an Identity backlog follow-up, not a campaign packet.
+- The [W8 deltas note](worknotes/W8-sprint2-deltas.md) is written (D-ML157), and the [next-batch plan](worknotes/next-batch-plan.md) specs L29b, L54b and L35m (D-ML153 to D-ML159).
 
-Next steps:
+Next steps ([next-batch plan](worknotes/next-batch-plan.md) section 2):
 
-1. Tip review 1's result.
-2. L27d, then L27e; L29b and L54b specs (before the campaign review and the wave 10 gates).
-3. The W8 deltas note before L40.
+1. Batch 1, no Docker, scoped checks only (D-ML153): L27d, L29b, L54b, L39. Merge order L39, L27d, L29b, L54b, then one serial full non-Docker suite on the tip.
+2. Serial: L27e; L35m then L35 (Docker; L35 also network); L37 after L54b.
+3. Architect specs L05b, L25g, L28b, L55b; then L52b, then L62 (D-ML158); then L38 and L56.
 4. Waves 6-10 (wave 6 waits on D-ML37/D-ML38), then the campaign review, L47 and one PR (D-ML131).
 
 **Owner rulings (2026-11-01):** D-ML127 parked the hunt gate as KG-W5-13, gated on L27b. D-ML128 approved the Nodes EF-retry product PR (NR-1, with seam S-L15). D-ML131 keeps one PR after L47. D-ML118 and D-ML125 are ratified by action. Open: D-ML120 (Nodes start without its database), D-ML133 (Nodes outbox), D-ML138 (carried out on option A; ratify by action).
