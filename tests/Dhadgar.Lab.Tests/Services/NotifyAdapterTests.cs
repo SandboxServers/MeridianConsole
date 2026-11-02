@@ -1,4 +1,10 @@
+using System.Threading;
+using System.Threading.Tasks;
 using Dhadgar.Lab.Services;
+using Dhadgar.Shared.Results;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Xunit;
 
 namespace Dhadgar.Lab.Tests.Services;
@@ -9,6 +15,54 @@ namespace Dhadgar.Lab.Tests.Services;
 /// </summary>
 public sealed class NotifyAdapterTests
 {
+    /// <summary>A clock that moves 100 seconds on every read, so one failed attempt passes the 90-second readiness deadline.</summary>
+    private sealed class JumpingClock : TimeProvider
+    {
+        private long _ticks;
+
+        public override long GetTimestamp() => Interlocked.Add(ref _ticks, TimestampFrequency * 100);
+    }
+
+    /// <summary>A loopback adapter whose health path is served by a test listener on <see cref="HostPort"/>.</summary>
+    private sealed class LoopbackAdapter : ILabServiceAdapter
+    {
+        public LoopbackAdapter(int hostPort, System.Net.HttpStatusCode readyStatusCode)
+        {
+            HostPort = hostPort;
+            ReadyStatusCode = readyStatusCode;
+        }
+
+        public string Name => "loopback";
+
+        public string Container => "meridian-lab-loopback";
+
+        public string Project => "loopback";
+
+        public int HostPort { get; }
+
+        public IReadOnlyList<string> Proxies { get; } = [];
+
+        public string HealthPath => "/healthz";
+
+        public System.Net.HttpStatusCode ReadyStatusCode { get; }
+
+        public IReadOnlySet<string> OverlayKeys { get; } = new HashSet<string>(StringComparer.Ordinal);
+
+        public Result<IReadOnlyDictionary<string, string>> Environment(LabServiceContext ctx) =>
+            Result<IReadOnlyDictionary<string, string>>.Success(new Dictionary<string, string>());
+    }
+
+    /// <summary>Starts a loopback listener whose <c>/healthz</c> answers 503, the way the Discord bot reports it is up.</summary>
+    private static async Task<WebApplication> StartServiceUnavailableListenerAsync()
+    {
+        WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
+        builder.WebHost.UseUrls("http://127.0.0.1:0");
+        WebApplication app = builder.Build();
+        app.MapGet("/healthz", () => Microsoft.AspNetCore.Http.Results.StatusCode(StatusCodes.Status503ServiceUnavailable));
+        await app.StartAsync();
+        return app;
+    }
+
     private static LabServiceContext Context(bool withAdminKey = true) =>
         new(
             "a9c623a1",
@@ -28,6 +82,37 @@ public sealed class NotifyAdapterTests
         Assert.Equal(System.Net.HttpStatusCode.ServiceUnavailable, new DiscordLabAdapter().ReadyStatusCode);
         ILabServiceAdapter notifications = new NotificationsLabAdapter();
         Assert.Equal(System.Net.HttpStatusCode.OK, notifications.ReadyStatusCode);
+    }
+
+    [Fact]
+    public async Task WaitReady_ServiceAnswersItsReadyStatus_IsReady()
+    {
+        await using WebApplication app = await StartServiceUnavailableListenerAsync();
+        int port = new Uri(app.Urls.First()).Port;
+
+        Result ready = await LabServices.WaitReadyAsync(
+            new LoopbackAdapter(port, System.Net.HttpStatusCode.ServiceUnavailable),
+            TimeProvider.System,
+            CancellationToken.None);
+
+        Assert.True(ready.IsSuccess, ready.Error);
+    }
+
+    [Fact]
+    public async Task WaitReady_ServiceAnswersOtherStatusThanReadyStatus_TimesOutNamingReadyStatus()
+    {
+        await using WebApplication app = await StartServiceUnavailableListenerAsync();
+        int port = new Uri(app.Urls.First()).Port;
+
+        Result ready = await LabServices.WaitReadyAsync(
+            new LoopbackAdapter(port, System.Net.HttpStatusCode.OK),
+            new JumpingClock(),
+            CancellationToken.None);
+
+        Assert.True(ready.IsFailure);
+        Assert.StartsWith("[Lab.Timeout]", ready.Error, StringComparison.Ordinal);
+        Assert.Contains("did not answer 200 within", ready.Error, StringComparison.Ordinal);
+        Assert.Contains("last status HTTP 503", ready.Error, StringComparison.Ordinal);
     }
 
     [Fact]

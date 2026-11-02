@@ -209,7 +209,13 @@ public sealed class LabServices
             return Result<LabServiceStartDto>.Failure(followed.Error);
         }
 
-        Result ready = await WaitReadyAsync(target, ct).ConfigureAwait(false);
+        var readyUri = new Uri($"http://127.0.0.1:{target.HostPort}{target.HealthPath}", UriKind.Absolute);
+        if (!LabHosts.IsLabEndpoint(readyUri))
+        {
+            return Result<LabServiceStartDto>.Failure("[Lab.Untrusted] readiness URL is not a lab endpoint");
+        }
+
+        Result ready = await WaitReadyAsync(target, _time, ct).ConfigureAwait(false);
         return ready.IsFailure
             ? Result<LabServiceStartDto>.Failure(ready.Error)
             : Result<LabServiceStartDto>.Success(new LabServiceStartDto(targetId, "up", image));
@@ -424,20 +430,21 @@ public sealed class LabServices
         return _vault.Use(reference, value => value.ToString());
     }
 
-    private async Task<Result> WaitReadyAsync(ILabServiceAdapter adapter, CancellationToken ct)
+    /// <summary>
+    /// Polls the adapter's health path on its loopback port until it answers <see cref="ILabServiceAdapter.ReadyStatusCode"/>,
+    /// or fails with <c>[Lab.Timeout]</c> once <see cref="ReadinessTimeoutSeconds"/> have passed on <paramref name="time"/>.
+    /// The caller checks the URL against <see cref="LabHosts.IsLabEndpoint"/> before calling.
+    /// Internal so the tests can drive the wait with a fake listener and clock.
+    /// </summary>
+    internal static async Task<Result> WaitReadyAsync(ILabServiceAdapter adapter, TimeProvider time, CancellationToken ct)
     {
         var uri = new Uri($"http://127.0.0.1:{adapter.HostPort}{adapter.HealthPath}", UriKind.Absolute);
-        if (!LabHosts.IsLabEndpoint(uri))
-        {
-            return Result.Failure("[Lab.Untrusted] readiness URL is not a lab endpoint");
-        }
-
         using var handler = new SocketsHttpHandler { AllowAutoRedirect = false, UseProxy = false };
         using var http = new HttpClient(handler, disposeHandler: false)
         {
             Timeout = TimeSpan.FromSeconds(5),
         };
-        long started = _time.GetTimestamp();
+        long started = time.GetTimestamp();
         var deadline = TimeSpan.FromSeconds(ReadinessTimeoutSeconds);
         string lastStatus = "no answer";
         string failingChecks = string.Empty;
@@ -467,11 +474,11 @@ public sealed class LabServices
                 lastStatus = "attempt timed out";
             }
 
-            if (_time.GetElapsedTime(started) >= deadline)
+            if (time.GetElapsedTime(started) >= deadline)
             {
                 string checks = failingChecks.Length == 0 ? string.Empty : $"; failing checks: {failingChecks}";
                 return Result.Failure(
-                    $"[Lab.Timeout] {adapter.Name} did not answer 200 within {ReadinessTimeoutSeconds} s; last status {lastStatus}{checks}");
+                    $"[Lab.Timeout] {adapter.Name} did not answer {(int)adapter.ReadyStatusCode} within {ReadinessTimeoutSeconds} s; last status {lastStatus}{checks}");
             }
 
             await Task.Delay(TimeSpan.FromMilliseconds(500), ct).ConfigureAwait(false);
