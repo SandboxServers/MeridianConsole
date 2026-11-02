@@ -102,17 +102,22 @@ public sealed class PoolAcquireTool : LabTool<PoolAcquireArgs>
 /// <summary>
 /// <c>pool_release</c> (Leased): destroys one container member. The host is refused.
 /// </summary>
-public sealed class PoolReleaseTool : LabTool<PoolReleaseArgs>
+public sealed class PoolReleaseTool : LabTool<PoolReleaseArgs>, IFaultTool
 {
     private readonly PoolManager _pool;
+    private readonly FaultTargetGuard _guard;
 
     /// <summary>
-    /// Creates the tool over the pool manager.
+    /// Creates the tool over the pool manager and the fault target guard.
     /// </summary>
-    public PoolReleaseTool(PoolManager pool)
+    public PoolReleaseTool(PoolManager pool, FaultTargetGuard guard)
     {
         _pool = pool ?? throw new ArgumentNullException(nameof(pool));
+        _guard = guard ?? throw new ArgumentNullException(nameof(guard));
     }
+
+    /// <inheritdoc />
+    public JsonElement SampleArgs(string targetId) => FaultToolSupport.ToArgs(new PoolReleaseArgs(targetId));
 
     /// <inheritdoc />
     public override string Name => "pool_release";
@@ -123,7 +128,20 @@ public sealed class PoolReleaseTool : LabTool<PoolReleaseArgs>
     /// <inheritdoc />
     protected override async Task<Result<object>> ExecuteAsync(PoolReleaseArgs args, LabCallContext context, CancellationToken ct)
     {
-        Result released = await _pool.ReleaseAsync(MemberIds.FromArgument(args.Member), ct).ConfigureAwait(false);
+        string memberId = MemberIds.FromArgument(args.Member);
+        if (memberId.Contains(':', StringComparison.Ordinal))
+        {
+            return Result<object>.Failure("[Lab.InvalidArgument] member must be a pool member id or m:<id>");
+        }
+
+        // Release destroys the container, so it is held to the same guard as a reset.
+        Result<ResolvedTarget> resolved = await _guard.ResolveAsync("m:" + memberId, "reset", ct).ConfigureAwait(false);
+        if (resolved.IsFailure)
+        {
+            return Result<object>.Failure(resolved.Error);
+        }
+
+        Result released = await _pool.ReleaseAsync(memberId, ct).ConfigureAwait(false);
         return released.IsFailure
             ? Result<object>.Failure(released.Error)
             : Result<object>.Success(new PoolReleasedResult(true));
