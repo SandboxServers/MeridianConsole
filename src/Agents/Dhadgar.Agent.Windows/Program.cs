@@ -8,6 +8,7 @@ using Dhadgar.Agent.Windows.Installation;
 using Dhadgar.Agent.Windows.Security;
 using Dhadgar.Agent.Windows.Services;
 using Dhadgar.Agent.Windows.Windows;
+using Dhadgar.Contracts.Agents;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -23,12 +24,12 @@ public static class Program
     /// <summary>
     /// Service name used for Windows Service registration.
     /// </summary>
-    public const string ServiceName = "DhadgarAgent";
+    public const string ServiceName = AgentWindowsFootprint.ServiceName;
 
     /// <summary>
     /// Event log source name.
     /// </summary>
-    public const string EventLogSourceName = "Meridian Console Agent";
+    public const string EventLogSourceName = AgentWindowsFootprint.EventLogSourceName;
 
     public static async Task<int> Main(string[] args)
     {

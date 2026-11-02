@@ -3,6 +3,7 @@ using System.Security;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Dhadgar.Agent.Core.Authentication;
+using Dhadgar.Contracts.Agents;
 using Microsoft.Extensions.Logging;
 
 namespace Dhadgar.Agent.Windows.Windows;
@@ -40,7 +41,7 @@ public sealed class WindowsCertificateStore : ICertificateStore, IDisposable
     /// <summary>
     /// Name of the custom store that holds the agent CA certificate (D-S219). Every store operation on the CA uses it.
     /// </summary>
-    internal const string CaStoreName = "MeridianConsoleAgent";
+    internal const string CaStoreName = AgentWindowsFootprint.CaStoreName;
 
     /// <summary>
     /// Friendly name used to identify Meridian Console Agent certificates.
