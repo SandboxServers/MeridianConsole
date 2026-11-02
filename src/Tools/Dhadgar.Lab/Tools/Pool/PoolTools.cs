@@ -117,19 +117,34 @@ public sealed class PoolAcquireTool : LabTool<PoolAcquireArgs>
                 Result installed = await CliMemberInstall.InstallAsync(_docker, member.ContainerName!, cliDirectory, ct).ConfigureAwait(false);
                 if (installed.IsFailure)
                 {
+                    await ReleaseAcquiredAsync(acquired.Value).ConfigureAwait(false);
                     return Result<object>.Failure(installed.Error);
                 }
 
-                // No admin key is seeded yet, so the config holds only gateway_url (notifications-admin needs a key later).
+                // The admin key is written per call by cli_run, because the vault has none until stack_up.
                 Result configured = await CliMemberInstall.InstallConfigAsync(_docker, member.ContainerName!, CliMemberInstall.StagingDirectory(_paths), null, _validator, ct).ConfigureAwait(false);
                 if (configured.IsFailure)
                 {
+                    await ReleaseAcquiredAsync(acquired.Value).ConfigureAwait(false);
                     return Result<object>.Failure(configured.Error);
                 }
             }
         }
 
         return Result<object>.Success(new PoolAcquireResult(acquired.Value));
+    }
+
+    /// <summary>
+    /// Releases every member a failed acquire took, so none stays leased. The caller returns the original install error.
+    /// A release failure is ignored here; <c>pool_reset</c> cleans up the rest. <c>ReleaseAsync</c> refuses the host.
+    /// </summary>
+    private async Task ReleaseAcquiredAsync(IReadOnlyList<PoolMember> members)
+    {
+        foreach (PoolMember member in members)
+        {
+            // CancellationToken.None: a failed acquire must never leave members leased.
+            _ = await _pool.ReleaseAsync(member.MemberId, CancellationToken.None).ConfigureAwait(false);
+        }
     }
 }
 
