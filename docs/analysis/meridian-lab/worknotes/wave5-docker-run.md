@@ -347,3 +347,38 @@ Teardown: `stack_down` wipe (state down, network absent, containers []); lease r
 
 Last check result line: Dhadgar.Lab.Tests Release build succeeded, 0 Warning(s), 0 Error(s). A11 Passed 1 Failed 0; A3 Passed 1 Failed 0. Fuzz 28 of 50 HTTP 500 (KG-W5-1, known).
 Next step: none for this run (raw results recorded). Soak and coverage not run (not in this brief).
+
+## Continuation 11 (wave5-docker-run-11, confirmation run, D-ML140 section 6, campaign tip 7351c6f7)
+
+Setup: campaign tip 7351c6f7, worktree `.claude/worktrees/meridian-lab`, non-elevated. Full report: `.claude/reports/meridian-lab/wave5-docker-run-11.md`. Procedure: ruling `wave5-boundary4-ruling.md` section 6, verbatim (RequiresDocker!=true filter, F123). Continuation 1 of the run's coder sessions finished the work a previous session had started.
+
+Build: Dhadgar.Lab Release build succeeded, 0 Warning(s), 0 Error(s); Dhadgar.Lab.Tests Release build succeeded, 0 Warning(s), 0 Error(s).
+
+Non-Docker suite (`RequiresDocker!=true`): Passed 1491, Failed 0, Skipped 5, Total 1496. The isolated `Hunter_SameSeed_SameFirstOpList` run failed on its assertion (`["Mint(60)","Enroll(0)","EnrollAgain(0)"]` expected, `["Mint(60)","Enroll(0)","Enroll(0)"]` actual), not a timeout, so the rerun rule did not apply. `I1FromThirdOp` ran and passed. Recorded raw, not diagnosed.
+
+Part A: A1, A4, A5, A6, A10 each Passed 1, Failed 0; A11 (`Seam=S-L7`) run twice, Passed 1 both times. No KG-W5-7 or KG-W5-15 red.
+
+Part B:
+
+| Seg | Gate | Job | Result |
+| --- | --- | --- | --- |
+| 1 | CLI probe: `status --json`, `status --port 9000`, `uat run --plan-only` | none | exit 0; exit 1 `[Lab.Refused]`; exit 0 plan |
+| 1 | R9-1 plain `uat_run` lab-selftest seed 12499590173714643239 | run e68d57 | overall pass, all 9 rows PASS |
+| 1 | `results_flake_check` rows `enroll-gateway` | ec7b4116d450 | succeeded, seed 12499590173714643239, `stable`, pass |
+| 1 | `results_flake_check` rows `lab-selftest/enroll-gateway` | 53ae4e1dbcf4 | succeeded, seed 12499590173714643239, `stable`, pass |
+| 2 | Hunt enrollment seed 4242, 300 s | d15428729f64 | succeeded, `diverged` at op 6 (`EnrollAgain(0): I1 violated outside a PgDown window`) |
+| 2 | Replay 1 (same daemon 51628, home `r11-home-2`) | 1a0f0bf1ffc7 | succeeded, `reproduced` at op 6 |
+| 2 | Replay 2 (daemon 19640, home `r11-home-3`, repro copied) | 286f5fb444c8 | succeeded, `reproduced` at op 6, same detail |
+
+Segment 2 audits (from the first `fault_reset` to `stack_reset_data`, both replays): `fault_reset`, `svc_restart`, `nodes_token_mint`, `nodes_enroll_probe`, `stack_reset_data`, all `outcome: ok`. The audit lines do not show the svc_restart target, the `hunt-warmup` label or the probe's HTTP 201; those three are UNVERIFIED from the audit alone.
+
+Daemon pids: 65520 (segment 1, stopped), 51628 (segment 2 replay 1, stopped), 19640 (segment 2 replay 2, stopped). Port 8789 free after each.
+
+Notes:
+- The ruling's section 6 lists two segments. The previous session's "segment 3" is segment 2 steps 4-6 (the new-home replay).
+- KG-W5-13 has early evidence only; the gate stays with the campaign review (D-ML127). No red was found in segment 1 or 2, so no KG was closed by this run.
+
+Teardown: `stack_down` wipe (state down, network absent, containers []); lease released; daemon 19640 stopped; `docker ps -a` and `docker network ls` filtered for `meridian-lab=1` show nothing; port 8789 free.
+
+Last check result line: Dhadgar.Lab.Tests non-Docker suite Passed 1491, Failed 0, Skipped 5, Total 1496 (`RequiresDocker!=true`). Teardown clean.
+Next step: none. The boundary-close ruling is the architect's (ruling section 7).
