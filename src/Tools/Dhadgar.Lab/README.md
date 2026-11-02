@@ -50,6 +50,19 @@ Dev and lab only, never production. `meridian-lab` is a local tool that drives t
 | Sink | 18090 | L36 |
 | Daemon | 8789 | lab daemon (loopback only) |
 
+## Services
+
+The lab starts these services from the working tree, each behind Toxiproxy for its dependencies.
+
+| Service | Port | Dependencies (proxy) | Health |
+|---|---|---|---|
+| Gateway | 15000 | Redis, Nodes, Identity, BetterAuth | `/healthz` |
+| Nodes | 15040 | Postgres, RabbitMQ | `/healthz` |
+| Identity | 15010 | Postgres (`identity-postgres`), Redis (`identity-redis`), RabbitMQ (`identity-rabbitmq`) | `/healthz` |
+| BetterAuth | 15130 | Postgres (`betterauth-postgres`) | `/healthz` |
+| Panel | 14321 | none | `/login` |
+
+`stack_up` generates a per-stack ES256 exchange key pair. BetterAuth signs exchange tokens with the private key; Identity verifies them with the public key. The private key and the BetterAuth secret live only in the vault and reach the container through an env file. BetterAuth and the Panel are Node apps built with `tools/lab/images/node-app.Dockerfile`. Identity has no outbox tables, so the I2 outbox invariant covers Nodes only.
 ## Daemon edge
 
 `meridian-lab daemon run` starts the loopback daemon. The token comes from `MERIDIAN_LAB_TOKEN` (at least 32 bytes, base64url); `meridian-lab token new` prints a fresh one. The daemon listens on `127.0.0.1` and `[::1]` only; there is no supported way to bind elsewhere, so `Lab:BindAddress` set to anything but loopback is a refusal. Kestrel endpoint settings in `labsettings.json` or the environment are ignored, and a start that reports any non-loopback address is refused. `MERIDIAN_LAB_HOME` must be a user-private directory; on Unix the lab root is created 0700 and `daemon.pid` 0600.
