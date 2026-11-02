@@ -19,8 +19,8 @@ namespace Dhadgar.Lab.Tests.Services;
 /// Builds Notifications and Discord from the working tree, starts the lab stack and both services, and checks the
 /// asserted states: Notifications answers <c>/healthz</c>, and Discord answers <c>/healthz</c> 503 while its bot is absent
 /// (D-ML41, F26). Runs only where the Linux Docker engine is available. Touches only <c>meridian-lab-*</c> resources.
-/// The sink (L36) starts first and answers <c>GET /_sink/requests</c> with <c>[]</c>. The Discord webhook call through the
-/// sink is not exercised here (recorded gap).
+/// The sink (L36) starts first and answers <c>GET /_sink/requests</c> with <c>[]</c>. The Discord webhook call through the sink
+/// is not exercised: the lab has no bus-publish path to <c>SendDiscordNotification</c> (KG-W7-2).
 /// </summary>
 [Collection(LabDockerGate.Name)]
 public sealed class NotifyDockerTests

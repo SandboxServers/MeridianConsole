@@ -1,3 +1,4 @@
+using Dhadgar.Lab.Invariants;
 using Dhadgar.Lab.Results;
 using Dhadgar.Shared.Results;
 
@@ -23,7 +24,7 @@ public sealed class KnownIssuesReachabilityTests
             [SignatureBuilder.Clause("catalog-nodes", "nodes-enroll-malformed", "problem-json", "NotHeld")]),
         ["KI-F69-HTTP"] = new("fuzz", "enroll/1", null,
             [SignatureBuilder.Http(new HttpEvidence("nodes", 400, null, "POST", "/api/v1/agents/enroll", "/api/v1/agents/enroll", []))]),
-        ["KI-NOTIF-OUTBOX"] = new("catalog-notifications", "outbox", null, [SignatureBuilder.Invariant("I2", "notifications", "outbox")]),
+        ["KI-NOTIF-OUTBOX"] = new("catalog-notifications", "outbox", null, [SignatureBuilder.Invariant("I2", "notifications", I2OutboxInvariant.TablesMissingCheckId)]),
         ["KI-RABBIT-HOST"] = new("catalog-notifications", "broker", null, [SignatureBuilder.Exception(new ExceptionEvidence(
             "notifications", "RabbitMQ.Client.Exceptions.BrokerUnreachableException", ["at RabbitMQ.Client.ConnectionFactory.CreateConnection()"]))]),
         ["KI-DISCORD-SECRETS-PORT"] = new("catalog-discord", "secrets", null, [SignatureBuilder.Exception(new ExceptionEvidence(

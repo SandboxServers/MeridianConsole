@@ -56,6 +56,14 @@ public sealed class SinkRecorder
         @"(?i)(?<pre>(?:access_token|refresh_token|id_token|password|passwd|client_secret|secret|api[_-]?key|token|authorization|private_key)\\?""?\s*[:=]\s*)(?:(?<q>\\?"")(?:[^""\\]|\\.)*(?<qe>\\?""|\\?\z)|[^""&,\s}]+)",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
+    /// <summary>
+    /// After <see cref="SecretPair"/>, an unquoted <c>authorization: Token abc</c> reads <c>authorization: [redacted] abc</c>;
+    /// this redacts the credential that followed a scheme word other than Bearer/Basic (security L36 pass 3).
+    /// </summary>
+    private static readonly Regex AuthorizationScheme = new(
+        @"(?i)(authorization\\?""?\s*[:=]\s*\[redacted\]\s+)[^""&,\s}\[]+",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
     private static readonly Regex BearerValue = new(
         @"(?i)(bearer\s+)[A-Za-z0-9._~+/=-]+",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -150,7 +158,7 @@ public sealed class SinkRecorder
         string withPem = PemBlock.Replace(text, "[redacted]");
         string withBasic = BasicValue.Replace(withPem, match => match.Groups[1].Value + "[redacted]");
         string withBearer = BearerValue.Replace(withBasic, match => match.Groups[1].Value + "[redacted]");
-        return SecretPair.Replace(withBearer, RedactPair);
+        return AuthorizationScheme.Replace(SecretPair.Replace(withBearer, RedactPair), "$1[redacted]");
     }
 
     private static string RedactPair(Match match)

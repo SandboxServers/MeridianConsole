@@ -102,6 +102,17 @@ public sealed class LabServices
         return Result<ILabServiceAdapter>.Success(adapter);
     }
 
+    /// <summary>The adapter's readiness URL on the loopback host.</summary>
+    internal static Uri ReadinessUri(ILabServiceAdapter adapter) =>
+        new($"http://127.0.0.1:{adapter.HostPort}{adapter.HealthPath}", UriKind.Absolute);
+
+    /// <summary>True when the adapter's readiness URL is a lab service endpoint or the sink (D-ML147).</summary>
+    internal static bool IsReadinessEndpoint(ILabServiceAdapter adapter)
+    {
+        Uri uri = ReadinessUri(adapter);
+        return LabHosts.IsLabEndpoint(uri) || LabHosts.IsSinkEndpoint(uri);
+    }
+
     /// <summary>
     /// Starts a service from a build (the latest build when <paramref name="buildId"/> is null). Replaces a lab-owned
     /// container of the same name, registers <c>c:&lt;service&gt;</c>, follows its logs and waits for its health path.
@@ -112,6 +123,11 @@ public sealed class LabServices
         if (adapter.IsFailure)
         {
             return Result<LabServiceStartDto>.Failure(adapter.Error);
+        }
+
+        if (!IsReadinessEndpoint(adapter.Value!))
+        {
+            return Result<LabServiceStartDto>.Failure("[Lab.Untrusted] readiness URL is not a lab endpoint");
         }
 
         Result stack = await RequireStackUpAsync(ct).ConfigureAwait(false);
@@ -200,12 +216,6 @@ public sealed class LabServices
         if (followed.IsFailure)
         {
             return Result<LabServiceStartDto>.Failure(followed.Error);
-        }
-
-        var readyUri = new Uri($"http://127.0.0.1:{target.HostPort}{target.HealthPath}", UriKind.Absolute);
-        if (!LabHosts.IsLabEndpoint(readyUri))
-        {
-            return Result<LabServiceStartDto>.Failure("[Lab.Untrusted] readiness URL is not a lab endpoint");
         }
 
         Result ready = await WaitReadyAsync(target, _time, ct).ConfigureAwait(false);
@@ -382,7 +392,7 @@ public sealed class LabServices
             Path.Combine(_paths.State, "nodes-ca"),
             "lab",
             password.Value!,
-            adminKey);
+            AdminApiKey: adminKey);
         Result<IReadOnlyDictionary<string, string>> composed = adapter.Environment(ctx);
         if (composed.IsFailure)
         {
@@ -449,7 +459,7 @@ public sealed class LabServices
     /// <summary>
     /// Polls the adapter's health path on its loopback port until it answers <see cref="ILabServiceAdapter.ReadyStatusCode"/>,
     /// or fails with <c>[Lab.Timeout]</c> once <see cref="ReadinessTimeoutSeconds"/> have passed on <paramref name="time"/>.
-    /// The caller checks the URL against <see cref="LabHosts.IsLabEndpoint"/> before calling.
+    /// <c>StartAsync</c> checks the URL with <c>IsReadinessEndpoint</c> before any docker call.
     /// Internal so the tests can drive the wait with a fake listener and clock.
     /// </summary>
     internal static async Task<Result> WaitReadyAsync(ILabServiceAdapter adapter, TimeProvider time, CancellationToken ct)

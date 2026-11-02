@@ -1,7 +1,18 @@
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
+using Dhadgar.Agent.Core.Files;
+using Dhadgar.Lab.Audit;
+using Dhadgar.Lab.Docker;
+using Dhadgar.Lab.Faults;
+using Dhadgar.Lab.Leasing;
+using Dhadgar.Lab.Processes;
+using Dhadgar.Lab.Secrets;
 using Dhadgar.Lab.Services;
+using Dhadgar.Lab.Stack;
 using Dhadgar.Shared.Results;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -74,7 +85,108 @@ public sealed class NotifyAdapterTests
             "C:\\lab\\state\\nodes-ca",
             "lab_user",
             "lab-password-value",
-            withAdminKey ? "lab-admin-key-value" : null);
+            AdminApiKey: withAdminKey ? "lab-admin-key-value" : null);
+
+    /// <summary>A docker double that records every call and answers a failure, so a test can prove nothing was run.</summary>
+    private sealed class CountingDocker : IDockerCli
+    {
+        public List<string> Calls { get; } = [];
+
+        public Task<Result<DockerOutput>> RunAsync(DockerEngine engine, IReadOnlyList<string> args, CancellationToken ct)
+        {
+            Calls.Add(string.Join(' ', args));
+            return Task.FromResult(Result<DockerOutput>.Success(new DockerOutput(1, string.Empty, "fake")));
+        }
+    }
+
+    /// <summary>Every concrete adapter the lab ships, created the way the coverage test enumerates them.</summary>
+    private static List<ILabServiceAdapter> ShippedAdapters()
+    {
+        var adapters = new List<ILabServiceAdapter>();
+        foreach (Type type in typeof(ILabServiceAdapter).Assembly.GetTypes())
+        {
+            if (type.IsClass && !type.IsAbstract && typeof(ILabServiceAdapter).IsAssignableFrom(type))
+            {
+                adapters.Add((ILabServiceAdapter)RuntimeHelpers.GetUninitializedObject(type));
+            }
+        }
+
+        return adapters;
+    }
+
+    [Fact]
+    public void Readiness_EveryShippedAdapter_IsALabOrSinkEndpoint()
+    {
+        List<ILabServiceAdapter> adapters = ShippedAdapters();
+
+        Assert.True(adapters.Count >= 5, $"only {adapters.Count} adapters found");
+        Assert.Contains(adapters, a => a.Name == "sink");
+        foreach (ILabServiceAdapter adapter in adapters)
+        {
+            Assert.True(LabServices.IsReadinessEndpoint(adapter), $"{adapter.Name}: readiness URL is not a lab or sink endpoint");
+        }
+    }
+
+    [Theory]
+    [InlineData(LabPorts.ToxiproxyApi)]
+    [InlineData(LabPorts.RabbitMqManagement)]
+    public void Readiness_InfraPortOtherThanSink_IsRefused(int port)
+    {
+        Assert.False(LabServices.IsReadinessEndpoint(new LoopbackAdapter(port, System.Net.HttpStatusCode.OK)));
+    }
+
+    [Fact]
+    public async Task StartAsync_UntrustedReadiness_RefusedBeforeAnyDockerCall()
+    {
+        string home = Path.Combine(Path.GetTempPath(), "meridian-lab-ready-" + Guid.NewGuid().ToString("N"));
+        _ = Directory.CreateDirectory(home);
+        try
+        {
+            var paths = LabPaths.FromRoot(home, home);
+            var validator = new PathValidator(NullLogger<PathValidator>.Instance);
+            var docker = new CountingDocker();
+            using var vault = new SecretVault();
+            using var toxi = new ToxiproxyClient();
+            var refs = new LabCredentialRefs();
+            var targets = new LabTargetRegistry(paths, docker, TimeProvider.System);
+            using var stack = new LabStack(docker, targets, toxi, vault, refs, paths, validator, TimeProvider.System);
+            var connections = new LabConnectionStrings(vault, refs);
+            var redactor = new Redactor(vault);
+            var leases = new LeaseBook(TimeProvider.System, new NullLabEvents(), new LeaseOptions());
+            using var supervisor = new LabProcessSupervisor(
+                new LogPathGuard(paths, validator),
+                redactor,
+                leases,
+                TimeProvider.System,
+                new NullRawLineObserver(),
+                new NoFaults());
+            var logs = new ContainerLogFollower(supervisor, new ConfigurationBuilder().Build(), TimeProvider.System, paths);
+            var overlay = new ConfigOverlay(paths, validator);
+            var services = new LabServices(
+                [new LoopbackAdapter(LabPorts.ToxiproxyApi, System.Net.HttpStatusCode.OK)],
+                docker,
+                targets,
+                stack,
+                connections,
+                refs,
+                vault,
+                logs,
+                overlay,
+                validator,
+                paths,
+                TimeProvider.System);
+
+            Result<LabServiceStartDto> result = await services.StartAsync("loopback", "a9c623a1", CancellationToken.None);
+
+            Assert.True(result.IsFailure);
+            Assert.StartsWith("[Lab.Untrusted]", result.Error, StringComparison.Ordinal);
+            Assert.Empty(docker.Calls);
+        }
+        finally
+        {
+            Directory.Delete(home, recursive: true);
+        }
+    }
 
     [Fact]
     public void ReadyStatus_DiscordCountsAs503_OthersAs200()

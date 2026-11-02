@@ -38,7 +38,7 @@ public sealed class BuildTool : LabTool<LabBuildArgs>
     public override string Name => "lab_build";
 
     /// <inheritdoc />
-    public override string Description => "Publish gateway, nodes and probe from a checkout (locked restore, no runtime identifier) and build their lab images.";
+    public override string Description => "Publish gateway, nodes, notifications, discord and probe from a checkout (locked restore, no runtime identifier) and build their lab images.";
 
     /// <inheritdoc />
     protected override async Task<Result<object>> ExecuteAsync(LabBuildArgs args, LabCallContext context, CancellationToken ct)

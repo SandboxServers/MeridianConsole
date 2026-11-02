@@ -28,7 +28,7 @@ public sealed class HttpRequestTool : LabTool<HttpRequestArgs>
     public override string Name => "http_request";
 
     /// <inheritdoc />
-    public override string Description => "Send one lab-only HTTP request via gateway, agent_ingress or a lab service. Redirects are not followed; ${secret:<ref>} placeholders in the JSON body are resolved and redacted in the reply.";
+    public override string Description => "Send one lab-only HTTP request via gateway, agent_ingress, sink or a lab service. Redirects are not followed; ${secret:<ref>} placeholders in the JSON body are resolved and redacted in the reply.";
 
     /// <inheritdoc />
     protected override async Task<Result<object>> ExecuteAsync(HttpRequestArgs args, LabCallContext context, CancellationToken ct)

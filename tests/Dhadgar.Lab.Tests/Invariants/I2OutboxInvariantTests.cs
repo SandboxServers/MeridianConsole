@@ -109,14 +109,33 @@ public sealed class I2OutboxInvariantTests
     }
 
     [Fact]
-    public async Task I2_Applicable_42P01_IsStillAFailure()
+    public async Task I2_Applicable_42P01_IsTablesMissingViolation()
     {
         using var vault = new SecretVault();
         var redactor = new Redactor(vault);
-        const string Message = "[Lab.InvalidArgument] Postgres rejected the statement (SQLSTATE 42P01)";
-        InvariantSqlQuery missing = (_, _, _) => Task.FromResult(Result<DbQueryResult>.Failure(Message));
+        string message = LabDb.RejectedStatementError("42P01");
+        InvariantSqlQuery missing = (_, _, _) => Task.FromResult(Result<DbQueryResult>.Failure(message));
         InvariantDbGate gate = (_, _) => Task.FromResult(Result<DbApplicability>.Success(DbApplicability.Applicable));
         var check = new I2OutboxInvariant(I2OutboxInvariant.NodesTargets, missing, redactor, gate);
+
+        Result<IReadOnlyList<InvariantViolation>> result = await check.CheckAsync(Window, CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        InvariantViolation violation = Assert.Single(result.Value!);
+        Assert.Equal(I2OutboxInvariant.TablesMissingCheckId, violation.CheckId);
+        Assert.Equal("nodes", violation.Service);
+        Assert.Contains("42P01", violation.Detail, StringComparison.Ordinal);
+        Assert.NotNull(violation.Evidence);
+    }
+
+    [Fact]
+    public async Task I2_NoGate_42P01_IsStillAFailure()
+    {
+        using var vault = new SecretVault();
+        var redactor = new Redactor(vault);
+        string message = LabDb.RejectedStatementError("42P01");
+        InvariantSqlQuery missing = (_, _, _) => Task.FromResult(Result<DbQueryResult>.Failure(message));
+        var check = new I2OutboxInvariant(I2OutboxInvariant.NodesTargets, missing, redactor);
 
         Result<IReadOnlyList<InvariantViolation>> result = await check.CheckAsync(Window, CancellationToken.None);
 
@@ -150,21 +169,23 @@ public sealed class I2OutboxInvariantTests
     }
 
     [Fact]
-    public async Task I2_NodesViolation_SurvivesNotificationsMissingTables()
+    public async Task I2_NodesViolation_AndNotificationsTablesMissing_BothReported()
     {
         using var vault = new SecretVault();
         var redactor = new Redactor(vault);
-        const string Message = "[Lab.InvalidArgument] Postgres rejected the statement (SQLSTATE 42P01)";
+        string message = LabDb.RejectedStatementError("42P01");
         InvariantSqlQuery query = (database, sql, ct) => database == "notifications"
-            ? Task.FromResult(Result<DbQueryResult>.Failure(Message))
+            ? Task.FromResult(Result<DbQueryResult>.Failure(message))
             : Fake(messageRows: 1, stateRows: 0)(database, sql, ct);
-        var check = new I2OutboxInvariant(I2OutboxInvariant.AllTargets, query, redactor);
+        InvariantDbGate gate = (_, _) => Task.FromResult(Result<DbApplicability>.Success(DbApplicability.Applicable));
+        var check = new I2OutboxInvariant(I2OutboxInvariant.AllTargets, query, redactor, gate);
 
         Result<IReadOnlyList<InvariantViolation>> result = await check.CheckAsync(Window, CancellationToken.None);
 
         Assert.True(result.IsSuccess, result.Error);
-        InvariantViolation violation = Assert.Single(result.Value!);
-        Assert.Equal("nodes", violation.Service);
+        Assert.Equal(2, result.Value!.Count);
+        Assert.Contains(result.Value, v => v.Service == "nodes" && v.CheckId == "outbox-message-stuck");
+        Assert.Contains(result.Value, v => v.Service == "notifications" && v.CheckId == I2OutboxInvariant.TablesMissingCheckId);
     }
 
     private static InvariantSqlQuery Fake(int messageRows, int stateRows) =>

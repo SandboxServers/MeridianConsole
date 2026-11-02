@@ -60,6 +60,21 @@ public sealed class SinkTests
         Assert.Equal("lab-probe/1.0", stored.Headers["User-Agent"]);
     }
 
+    [Theory]
+    [InlineData("Authorization: Token abc123SECRET")]
+    [InlineData("authorization: Bot abc123SECRET")]
+    [InlineData("Authorization=Digest abc123SECRET&x=1")]
+    public void Redact_AuthorizationWithOtherScheme_IsRedacted(string input)
+    {
+        string redacted = SinkRecorder.Redact(input);
+
+        Assert.DoesNotContain("abc123SECRET", redacted, StringComparison.Ordinal);
+        if (input.EndsWith("&x=1", StringComparison.Ordinal))
+        {
+            Assert.EndsWith("&x=1", redacted, StringComparison.Ordinal);
+        }
+    }
+
     [Fact]
     public void Redact_RemovesCredentialsFromBodyAndHeaders()
     {

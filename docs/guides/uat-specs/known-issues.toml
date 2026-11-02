@@ -104,7 +104,7 @@ id = "KI-NOTIF-OUTBOX"
 title = "Notifications outbox tables are missing, so I2 cannot check the outbox"
 link = "docs/PROJECT-STATE.md"
 signatures = []
-patterns = ['^inv:I2\|notifications\|']
+patterns = ['^inv:I2\|notifications\|outbox-tables-missing$']
 state = "open"
 
 [issue.scope]

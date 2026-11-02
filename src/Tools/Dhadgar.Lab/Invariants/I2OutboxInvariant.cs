@@ -31,6 +31,11 @@ public sealed class I2OutboxInvariant : ISkippableInvariant
     private const int EvidenceRows = 5;
     private const int MaxDetailLength = 512;
 
+    /// <summary>The check id of a missing outbox table on a migrated database (D-ML148, KI-NOTIF-OUTBOX).</summary>
+    public const string TablesMissingCheckId = "outbox-tables-missing";
+
+    private const string UndefinedTable = "42P01";
+
     /// <summary>The Nodes outbox: MassTransit tables <c>OutboxMessage</c> (aged by <c>EnqueueTime</c>) and <c>OutboxState</c> (aged by <c>Created</c>, delivered by <c>Delivered</c>).</summary>
     public static IReadOnlyList<OutboxTarget> NodesTargets { get; } =
     [
@@ -38,8 +43,8 @@ public sealed class I2OutboxInvariant : ISkippableInvariant
     ];
 
     /// <summary>
-    /// The Notifications outbox (L36): the EF outbox MassTransit creates in <c>notifications</c>. Until its migrations
-    /// create the tables, the check fails with the Postgres <c>42P01</c> text (KI-NOTIF-OUTBOX).
+    /// The Notifications outbox (L36): the EF outbox MassTransit uses in <c>notifications</c>. Its migrations do not create the
+    /// tables (F25), so on a migrated database each check reports violation <c>outbox-tables-missing</c> (D-ML148, KI-NOTIF-OUTBOX).
     /// </summary>
     public static IReadOnlyList<OutboxTarget> NotificationsTargets { get; } =
     [
@@ -135,7 +140,20 @@ public sealed class I2OutboxInvariant : ISkippableInvariant
                 Result<DbQueryResult> query = await _query(target.Database, probe.Sql, ct).ConfigureAwait(false);
                 if (query.IsFailure)
                 {
-                    // Keep checking the other targets; the failure is returned after the violations found so far.
+                    if (_gate is not null && string.Equals(query.Error, LabDb.RejectedStatementError(UndefinedTable), StringComparison.Ordinal))
+                    {
+                        // The gate said migrated, yet the outbox table is absent: a product defect, matched to KI-NOTIF-OUTBOX (D-ML148).
+                        violations.Add(new InvariantViolation(
+                            Id,
+                            target.Service,
+                            TablesMissingCheckId,
+                            $"{probe.Table}: table does not exist (SQLSTATE {UndefinedTable})",
+                            window.To,
+                            _redactor.Redact(JsonSerializer.SerializeToElement(new { table = probe.Table, sqlstate = UndefinedTable }))));
+                        break;
+                    }
+
+                    // Keep checking the other targets; the failure is returned after the violations found so far (KG-W7-3).
                     failure ??= $"{target.Service} {probe.CheckId}: {query.Error}";
                     break;
                 }

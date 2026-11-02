@@ -144,13 +144,17 @@ public sealed class LabDb
         catch (PostgresException ex)
         {
             // The server message can echo literal values, so only the SQLSTATE is returned.
-            return Result<DbQueryResult>.Failure($"[Lab.InvalidArgument] Postgres rejected the statement (SQLSTATE {ex.SqlState})");
+            return Result<DbQueryResult>.Failure(RejectedStatementError(ex.SqlState));
         }
         catch (NpgsqlException)
         {
             return Result<DbQueryResult>.Failure("[Lab.Unavailable] the database is not reachable on the lab host port");
         }
     }
+
+    /// <summary>The error for a statement Postgres rejected; only the SQLSTATE is returned (the message can echo values).</summary>
+    internal static string RejectedStatementError(string sqlState) =>
+        $"[Lab.InvalidArgument] Postgres rejected the statement (SQLSTATE {sqlState})";
 
     private static Result<List<NpgsqlParameter>> BindParameters(IReadOnlyDictionary<string, JsonElement> parameters)
     {
