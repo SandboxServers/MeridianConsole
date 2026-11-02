@@ -12,8 +12,7 @@ public sealed class GatewayRouteTableTests
     public void EveryGatewayRoute_IsInTheTable_WithTheSameCluster()
     {
         string path = Path.Combine(FindRepoRoot(), "src", "Dhadgar.Gateway", "appsettings.json");
-        JsonDocumentOptions options = new() { CommentHandling = JsonCommentHandling.Skip };
-        using JsonDocument document = JsonDocument.Parse(File.ReadAllText(path), options);
+        using JsonDocument document = JsonDocument.Parse(File.ReadAllText(path));
         JsonElement routes = document.RootElement.GetProperty("ReverseProxy").GetProperty("Routes");
 
         int count = 0;
@@ -22,9 +21,11 @@ public sealed class GatewayRouteTableTests
             count++;
             string template = route.Value.GetProperty("Match").GetProperty("Path").GetString()!;
             string cluster = route.Value.GetProperty("ClusterId").GetString()!;
+            int brace = template.IndexOf('{', StringComparison.Ordinal);
+            string literal = brace >= 0 ? template[..brace] : template;
 
-            Assert.Contains(GatewayRouteTable.Routes, entry => entry.Template == template && entry.ClusterId == cluster);
-            Assert.Equal(cluster, GatewayRouteTable.ClusterFor(SamplePath(template)));
+            Assert.Contains(GatewayRouteTable.Routes, entry => entry.PathPrefix == literal && entry.ClusterId == cluster);
+            Assert.Equal(cluster, GatewayRouteTable.ClusterFor(literal + "sample"));
         }
 
         Assert.True(count > 0);
@@ -35,27 +36,6 @@ public sealed class GatewayRouteTableTests
     {
         Assert.Null(GatewayRouteTable.ClusterFor("/api/v1/unrouted/thing"));
         Assert.Null(GatewayRouteTable.ClusterFor(null));
-    }
-
-    /// <summary>
-    /// A concrete path for a route template: each parameter becomes a value, and a catch-all becomes a tail segment.
-    /// </summary>
-    private static string SamplePath(string template)
-    {
-        string[] parts = template.Split('/');
-        for (int i = 0; i < parts.Length; i++)
-        {
-            if (parts[i].StartsWith("{**", StringComparison.Ordinal))
-            {
-                parts[i] = "tail";
-            }
-            else if (parts[i].StartsWith('{'))
-            {
-                parts[i] = "sample";
-            }
-        }
-
-        return string.Join('/', parts);
     }
 
     private static string FindRepoRoot()
