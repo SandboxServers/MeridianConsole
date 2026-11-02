@@ -345,6 +345,8 @@ The shipped spec `docs/guides/uat-specs/lab-selftest.toml` (section `lab-selftes
 
 The shipped spec `docs/guides/uat-specs/enroll-probe.toml` (section `enroll-probe`, one row `enroll-gateway` with no `depends_on`) starts nothing: it mints a token and enrolls once through the Gateway against a stack its caller already started. It is the M5 mutant's detector and the chaos `nodes-enroll` workload (D-ML123).
 
+The shipped spec `docs/guides/uat-specs/cli.toml` (section `cli`, `requires_pool` Linux container) runs live through `CliSpecE2ETests`: `dotnet test tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --filter "FullyQualifiedName~CliSpecE2ETests"`. The test starts the daemon in process with a token it generates in memory, so it needs no running daemon and no `MERIDIAN_LAB_TOKEN`. It builds the tip with `lab_build` first. It needs Docker on `desktop-linux`, and `MERIDIAN_LAB_S6_WIPE=1` when labelled lab containers exist.
+
 ## Self-check
 
 Gate LS (L55) runs the lab against itself. `dotnet run --project src/Tools/Dhadgar.Lab.SelfCheck -c Release -- selfcheck [--only <id>] [--keep]` copies HEAD into `%TEMP%\meridian-lab-selfcheck\<guid>\`, runs a baseline over each lab mutant's named test (every one must pass there, else the whole run is `invalid`), then for each `kind = "lab"` mutant (LM1-LM8) applies its `change.patch`, builds, runs the named test and reverts the patch. A mutant is `caught` only when that test ran and failed in the TRX. A build failure, zero tests run, a skipped test or a patch that does not apply is `invalid`, never `caught`. The result is written to `Results\selfcheck\<timestamp>\selfcheck.json` and `selfcheck.md`. Exit code 0 only when every lab mutant is `caught`.
