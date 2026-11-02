@@ -881,7 +881,8 @@ public sealed class LabStack : ILabStatusSource, IDisposable
     }
 
     /// <summary>
-    /// Lists the labelled lab containers whose names carry the lab prefix, registered or not. Only these names may be removed by wipe.
+    /// Lists the labelled lab containers whose names carry the lab prefix, registered or not, except the containers of registered pool
+    /// members, which the pool owns (D-ML171). Only these names may be removed by wipe.
     /// </summary>
     private async Task<Result<IReadOnlyList<string>>> ListLabelledContainersAsync(CancellationToken ct)
     {
@@ -896,10 +897,16 @@ public sealed class LabStack : ILabStatusSource, IDisposable
             return Result<IReadOnlyList<string>>.Failure("[Lab.Docker] could not list lab containers");
         }
 
+        // Pool members the registry holds are the pool's to remove, not the wipe's (D-ML171).
+        HashSet<string> held = _targets.All
+            .Where(t => t.Kind == LabTargetKind.Member && !string.IsNullOrEmpty(t.ContainerId))
+            .Select(t => t.ContainerId!)
+            .ToHashSet(StringComparer.Ordinal);
+
         // R-BLAST: the prefix check keeps any labelled container with a foreign name out of reach.
         IReadOnlyList<string> names = listed.Value.StdOut
             .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Where(name => name.StartsWith(LabDefaults.ContainerPrefix, StringComparison.Ordinal))
+            .Where(name => name.StartsWith(LabDefaults.ContainerPrefix, StringComparison.Ordinal) && !held.Contains(name))
             .ToList();
         return Result<IReadOnlyList<string>>.Success(names);
     }

@@ -7,8 +7,9 @@ using Microsoft.Extensions.Configuration;
 namespace Dhadgar.Lab.Pool;
 
 /// <summary>
-/// Linux member provider (L30): one <c>docker run</c> per member on the lab network, from the member image. Every call goes
-/// through <see cref="IDockerCli"/> with <c>ArgumentList</c> (R-DOCKER). No volume and no published port (R-BLAST).
+/// Linux member provider (L30): one <c>docker run</c> per member on the lab network, from the member image. The provider creates
+/// the labelled lab network when it is missing (L37f1). Every call goes through <see cref="IDockerCli"/> with <c>ArgumentList</c>
+/// (R-DOCKER). No volume and no published port (R-BLAST).
 /// </summary>
 public sealed class LinuxContainerProvider : IPoolProvider
 {
@@ -16,7 +17,6 @@ public sealed class LinuxContainerProvider : IPoolProvider
     public const string ContainerPrefix = "meridian-lab-m-";
 
     private const string DefaultImage = LabBuilder.LinuxMemberLatestTag;
-    private const string LabNetwork = "meridian-lab-net";
     private const string ImagePattern = @"^[A-Za-z0-9][A-Za-z0-9._/:@-]{0,255}\z";
     private const string MemberLabelFormat = "{{index .Config.Labels \"meridian-lab\"}} {{index .Config.Labels \"meridian-lab-member\"}}";
 
@@ -99,9 +99,49 @@ public sealed class LinuxContainerProvider : IPoolProvider
             : Result.Failure("[Lab.Docker] member container could not be removed");
     }
 
+    /// <summary>
+    /// Makes sure the labelled lab network exists before a member is run on it (L37f1). Creates it only when inspect says it is missing.
+    /// </summary>
+    private async Task<Result> EnsureNetworkAsync(CancellationToken ct)
+    {
+        Result<DockerOutput> inspect = await _docker.RunAsync(DockerEngine.Linux, ["network", "inspect", LabDefaults.NetworkName], ct).ConfigureAwait(false);
+        if (inspect.IsFailure)
+        {
+            return Result.Failure(inspect.Error);
+        }
+
+        if (inspect.Value.ExitCode == 0)
+        {
+            return Result.Success();
+        }
+
+        Result<DockerOutput> created = await _docker.RunAsync(DockerEngine.Linux, ["network", "create", "--label", LabDefaults.ContainerLabel + "=1", LabDefaults.NetworkName], ct).ConfigureAwait(false);
+        if (created.IsFailure)
+        {
+            return Result.Failure(created.Error);
+        }
+
+        if (created.Value.ExitCode == 0)
+        {
+            return Result.Success();
+        }
+
+        // The stack or another provision may have created it first (D-ML172).
+        Result<DockerOutput> again = await _docker.RunAsync(DockerEngine.Linux, ["network", "inspect", LabDefaults.NetworkName], ct).ConfigureAwait(false);
+        return again.IsSuccess && again.Value.ExitCode == 0
+            ? Result.Success()
+            : Result.Failure("[Lab.Docker] could not create the lab network");
+    }
+
     private async Task<Result<PoolMember>> RunMemberAsync(string memberId, CancellationToken ct)
     {
         string name = ContainerPrefix + memberId;
+        Result network = await EnsureNetworkAsync(ct).ConfigureAwait(false);
+        if (network.IsFailure)
+        {
+            return Result<PoolMember>.Failure(network.Error);
+        }
+
         Result<DockerOutput> run;
         try
         {
@@ -112,7 +152,7 @@ public sealed class LinuxContainerProvider : IPoolProvider
                     "--name", name,
                     "--label", "meridian-lab=1",
                     "--label", "meridian-lab-member=" + memberId,
-                    "--network", LabNetwork,
+                    "--network", LabDefaults.NetworkName,
                     "--restart", "no",
                     "--memory", "1g",
                     "--",

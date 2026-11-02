@@ -275,7 +275,7 @@ public static class CliMemberInstall
 
     /// <summary>
     /// Installs the CLI and its config into one pool member when it is a Linux container with a latest build that has a CLI.
-    /// Used by <c>pool_acquire</c> and <c>member_reset</c>, because a reset recreates the container from the bare image.
+    /// Used by <c>pool_acquire</c>, <c>member_reset</c> and <c>uat_run</c> (through <c>CliMemberPreparer</c>), because a reset recreates the container from the bare image.
     /// Returns success without doing anything for other members or when there is no CLI to install.
     /// </summary>
     public static async Task<Result> InstallIntoMemberAsync(IDockerCli docker, LabPaths paths, IPathValidator validator, PoolMember member, CancellationToken ct)

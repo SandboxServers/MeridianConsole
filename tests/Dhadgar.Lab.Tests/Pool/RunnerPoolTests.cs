@@ -57,6 +57,7 @@ public sealed class RunnerPoolTests : IDisposable
     private readonly PoolHarness _pool;
     private readonly AuditLog _audit;
     private readonly UatRunner _runner;
+    private readonly RecordingPreparer _preparer = new();
 
     public RunnerPoolTests()
     {
@@ -69,7 +70,7 @@ public sealed class RunnerPoolTests : IDisposable
         var leases = new LeaseBook(_time, new NullLabEvents(), new LeaseOptions());
         var dispatcher = new LabToolDispatcher(new LabToolRegistry(new ILabTool[] { new EchoTool() }), leases, _audit, redactor, _time);
         var evaluator = new ClauseEvaluator(new IClauseSource[] { new StepSource() }, redactor, _time);
-        _runner = new UatRunner(dispatcher, leases, evaluator, new Probe(), _time, pool: _pool.Manager);
+        _runner = new UatRunner(dispatcher, leases, evaluator, new Probe(), _time, pool: _pool.Manager, preparer: _preparer);
     }
 
     public void Dispose()
@@ -137,6 +138,38 @@ public sealed class RunnerPoolTests : IDisposable
     }
 
     [Fact]
+    public async Task Section_PreparesTheMemberAfterAcquireAndAfterEachReset()
+    {
+        UatRunResult run = await RunAsync(Header + RowA + RowA.Replace("\"a\"", "\"b\"", StringComparison.Ordinal));
+
+        Assert.All(run.Rows, row => Assert.Equal(RowGrade.Pass, row.Grade));
+        Assert.Equal(["lin-01", "lin-01"], _preparer.Prepared);
+    }
+
+    [Fact]
+    public async Task ReuseMember_PreparesOnlyOnce()
+    {
+        string second = RowA.Replace("\"a\"", "\"b\"", StringComparison.Ordinal).Replace("depends_on = []", "depends_on = []\nreuse_member = true", StringComparison.Ordinal);
+
+        UatRunResult run = await RunAsync(Header + RowA + second);
+
+        Assert.All(run.Rows, row => Assert.Equal(RowGrade.Pass, row.Grade));
+        Assert.Equal(["lin-01"], _preparer.Prepared);
+    }
+
+    [Fact]
+    public async Task PreparerFailure_SkipsEveryRowWithThePoolError_AndReleasesTheMember()
+    {
+        _preparer.FailWith = "[Lab.Docker] cli install failed";
+
+        UatRunResult run = await RunAsync(Header + RowA + RowA.Replace("\"a\"", "\"b\"", StringComparison.Ordinal));
+
+        Assert.All(run.Rows, row => Assert.Equal(RowGrade.Skipped, row.Grade));
+        Assert.All(run.Rows, row => Assert.Contains("pool: [Lab.Docker] cli install failed", row.Reason, StringComparison.Ordinal));
+        Assert.Equal(["lin-01"], _linux.Destroyed);
+    }
+
+    [Fact]
     public async Task SectionWithoutRequiresPool_NeverTouchesThePool()
     {
         string plain = Header.Replace("requires_pool = { os = \"linux\", kind = \"container\" }", string.Empty, StringComparison.Ordinal) + RowA;
@@ -155,6 +188,20 @@ public sealed class RunnerPoolTests : IDisposable
             new UatRunRequest(loaded.Spec!, null, 7UL, null, null, PlanOnly: false), new CollectingSink(), CancellationToken.None);
         Assert.True(run.IsSuccess, run.Error);
         return run.Value!;
+    }
+
+    /// <summary>Records each member the runner prepares; fails with <see cref="FailWith"/> when it is set.</summary>
+    private sealed class RecordingPreparer : IPoolMemberPreparer
+    {
+        public List<string> Prepared { get; } = [];
+
+        public string? FailWith { get; set; }
+
+        public Task<Result> PrepareAsync(PoolMember member, CancellationToken ct)
+        {
+            Prepared.Add(member.MemberId);
+            return Task.FromResult(FailWith is null ? Result.Success() : Result.Failure(FailWith));
+        }
     }
 
     private sealed class CollectingSink : IUatRunSink

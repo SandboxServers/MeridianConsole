@@ -1,3 +1,4 @@
+using Dhadgar.Lab.Pool;
 using Dhadgar.Lab.Tools.Cli;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -11,5 +12,6 @@ public static partial class LabMcpServer
     static partial void AddCliArea(IServiceCollection services)
     {
         AddLabTool<CliRunTool>(services);
+        services.AddSingleton<IPoolMemberPreparer, CliMemberPreparer>();
     }
 }
