@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+using Dhadgar.Lab.Build;
 using Dhadgar.Lab.Docker;
 using Dhadgar.Shared.Results;
 using Microsoft.Extensions.Configuration;
@@ -13,20 +15,24 @@ public sealed class LinuxContainerProvider : IPoolProvider
     /// <summary>The container name prefix; the member id follows it.</summary>
     public const string ContainerPrefix = "meridian-lab-m-";
 
-    private const string DefaultImage = "meridian-lab/linux-member:latest";
+    private const string DefaultImage = LabBuilder.LinuxMemberLatestTag;
     private const string LabNetwork = "meridian-lab-net";
+    private const string ImagePattern = @"^[A-Za-z0-9][A-Za-z0-9._/:@-]{0,255}\z";
+    private const string MemberLabelFormat = "{{index .Config.Labels \"meridian-lab\"}} {{index .Config.Labels \"meridian-lab-member\"}}";
 
     private readonly IDockerCli _docker;
     private readonly string _image;
 
     /// <summary>
-    /// Creates the provider. The image comes from <c>Lab:Pool:LinuxImage</c>; the default names the untagged member image.
+    /// Creates the provider. The image comes from <c>Lab:Pool:LinuxImage</c>; the default is the member image <c>lab_build</c> tags as latest.
+    /// A value that is not a plain image reference falls back to the default.
     /// </summary>
     public LinuxContainerProvider(IDockerCli docker, IConfiguration configuration)
     {
         _docker = docker ?? throw new ArgumentNullException(nameof(docker));
         ArgumentNullException.ThrowIfNull(configuration);
-        _image = configuration["Lab:Pool:LinuxImage"] is { Length: > 0 } image ? image : DefaultImage;
+        string? configured = configuration["Lab:Pool:LinuxImage"];
+        _image = configured is { Length: > 0 } && Regex.IsMatch(configured, ImagePattern) ? configured : DefaultImage;
     }
 
     /// <inheritdoc />
@@ -38,7 +44,7 @@ public sealed class LinuxContainerProvider : IPoolProvider
     /// <inheritdoc />
     public async Task<Result<bool>> IsAvailableAsync(CancellationToken ct)
     {
-        Result<DockerOutput> inspect = await _docker.RunAsync(DockerEngine.Linux, ["image", "inspect", "--format", "{{.Id}}", _image], ct)
+        Result<DockerOutput> inspect = await _docker.RunAsync(DockerEngine.Linux, ["image", "inspect", "--format", "{{.Id}}", "--", _image], ct)
             .ConfigureAwait(false);
         if (inspect.IsFailure)
         {
@@ -74,12 +80,14 @@ public sealed class LinuxContainerProvider : IPoolProvider
     public async Task<Result> DestroyAsync(PoolMember member, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(member);
-        if (string.IsNullOrEmpty(member.ContainerName))
+        if (string.IsNullOrEmpty(member.MemberId))
         {
             return Result.Failure("[Lab.Docker] member has no container");
         }
 
-        Result<DockerOutput> removed = await _docker.RunAsync(DockerEngine.Linux, ["rm", "-f", member.ContainerName], ct).ConfigureAwait(false);
+        // The name is rebuilt from the member id, the value the guard verified, never taken from the stored name (N3).
+        string name = ContainerPrefix + member.MemberId;
+        Result<DockerOutput> removed = await _docker.RunAsync(DockerEngine.Linux, ["rm", "-f", name], ct).ConfigureAwait(false);
         if (removed.IsFailure)
         {
             return Result.Failure(removed.Error);
@@ -94,28 +102,36 @@ public sealed class LinuxContainerProvider : IPoolProvider
     private async Task<Result<PoolMember>> RunMemberAsync(string memberId, CancellationToken ct)
     {
         string name = ContainerPrefix + memberId;
-        Result<DockerOutput> run = await _docker.RunAsync(
-            DockerEngine.Linux,
-            [
-                "run", "-d",
-                "--name", name,
-                "--label", "meridian-lab=1",
-                "--label", "meridian-lab-member=" + memberId,
-                "--network", LabNetwork,
-                "--restart", "no",
-                "--memory", "1g",
-                _image,
-            ],
-            ct).ConfigureAwait(false);
-
-        if (run.IsFailure)
+        Result<DockerOutput> run;
+        try
         {
-            return Result<PoolMember>.Failure(run.Error);
+            run = await _docker.RunAsync(
+                DockerEngine.Linux,
+                [
+                    "run", "-d",
+                    "--name", name,
+                    "--label", "meridian-lab=1",
+                    "--label", "meridian-lab-member=" + memberId,
+                    "--network", LabNetwork,
+                    "--restart", "no",
+                    "--memory", "1g",
+                    "--",
+                    _image,
+                ],
+                ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // The run may have created the container before the cancel landed; remove it, then rethrow (N4).
+            await RemoveOwnContainerAsync(memberId, name, CancellationToken.None).ConfigureAwait(false);
+            throw;
         }
 
-        if (run.Value.ExitCode != 0)
+        if (run.IsFailure || run.Value.ExitCode != 0)
         {
-            return Result<PoolMember>.Failure("[Lab.Docker] member container could not be started");
+            // A failed run can still leave the named container behind; remove it only when it carries this member's labels (N4).
+            await RemoveOwnContainerAsync(memberId, name, ct).ConfigureAwait(false);
+            return Result<PoolMember>.Failure(run.IsFailure ? run.Error : "[Lab.Docker] member container could not be started");
         }
 
         return Result<PoolMember>.Success(new PoolMember(
@@ -125,5 +141,23 @@ public sealed class LinuxContainerProvider : IPoolProvider
             Dimensions,
             MemberState.Ready,
             DateTimeOffset.MinValue));
+    }
+
+    /// <summary>
+    /// Removes the named container only when it carries both lab labels with this member id. A name conflict with a foreign
+    /// container, or a container that does not exist, is left alone. Best effort: the outcome is not reported.
+    /// </summary>
+    private async Task RemoveOwnContainerAsync(string memberId, string name, CancellationToken ct)
+    {
+        Result<DockerOutput> labels = await _docker.RunAsync(
+            DockerEngine.Linux,
+            ["inspect", "--format", MemberLabelFormat, "--", name],
+            ct).ConfigureAwait(false);
+        if (labels.IsFailure || labels.Value.ExitCode != 0 || !string.Equals(labels.Value.StdOut.Trim(), "1 " + memberId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _ = await _docker.RunAsync(DockerEngine.Linux, ["rm", "-f", name], ct).ConfigureAwait(false);
     }
 }

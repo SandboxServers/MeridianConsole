@@ -119,6 +119,12 @@ public sealed class PoolManager : ILeaseEndHook, ILabStatusSource, IHostedServic
             string? reason = null;
             foreach (IPoolProvider provider in _providers)
             {
+                // The host is the developer's own machine: a caller gets it only by naming it, never by leaving constraints open (N1).
+                if (provider.Dimensions.Kind == "host" && !string.Equals(constraints.Kind, "host", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
                 if (!Matches(provider.Dimensions, constraints))
                 {
                     continue;
@@ -153,22 +159,36 @@ public sealed class PoolManager : ILeaseEndHook, ILabStatusSource, IHostedServic
             }
 
             var created = new List<PoolMember>();
-            for (var i = 0; i < constraints.Count; i++)
+            try
             {
-                string memberId = NextMemberId(chosen.Dimensions.Os);
-                Result<PoolMember> provisioned = await ProvisionOneAsync(chosen, constraints, memberId, leaseId, ct).ConfigureAwait(false);
-                if (provisioned.IsFailure)
+                for (var i = 0; i < constraints.Count; i++)
                 {
-                    foreach (PoolMember partial in created)
+                    string memberId = NextMemberId(chosen.Dimensions.Os);
+                    Result<PoolMember> provisioned = await ProvisionOneAsync(chosen, constraints, memberId, leaseId, ct).ConfigureAwait(false);
+                    if (provisioned.IsFailure)
                     {
-                        _ = await DestroyOneAsync(partial, ct).ConfigureAwait(false);
+                        foreach (PoolMember partial in created)
+                        {
+                            _ = await DestroyOneAsync(partial, ct).ConfigureAwait(false);
+                        }
+
+                        _ = await SaveAsync(ct).ConfigureAwait(false);
+                        return Result<IReadOnlyList<PoolMember>>.Failure(provisioned.Error);
                     }
 
-                    _ = await SaveAsync(ct).ConfigureAwait(false);
-                    return Result<IReadOnlyList<PoolMember>>.Failure(provisioned.Error);
+                    created.Add(provisioned.Value);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // A cancelled acquire undoes the members it already made, so none outlive the call (N4).
+                foreach (PoolMember partial in created)
+                {
+                    _ = await DestroyOneAsync(partial, CancellationToken.None).ConfigureAwait(false);
                 }
 
-                created.Add(provisioned.Value);
+                _ = await SaveAsync(CancellationToken.None).ConfigureAwait(false);
+                throw;
             }
 
             Result saved = await SaveAsync(ct).ConfigureAwait(false);
@@ -312,6 +332,13 @@ public sealed class PoolManager : ILeaseEndHook, ILabStatusSource, IHostedServic
                 }
             }
 
+            // The host has no container and is not destroyed; its lease ended too, so it is forgotten (review N2).
+            lock (_state)
+            {
+                _members.RemoveAll(m => m.MemberId == HostMemberId);
+                _leaseOf.Remove(HostMemberId);
+            }
+
             _ = await SaveAsync(ct).ConfigureAwait(false);
             _logger.LogInformation("lab.pool destroyed {Count} member(s) at lease end", destroyed);
         }
@@ -327,8 +354,16 @@ public sealed class PoolManager : ILeaseEndHook, ILabStatusSource, IHostedServic
     {
         List<PoolMember> listed = await LoadAsync(cancellationToken).ConfigureAwait(false);
         var leftover = 0;
-        foreach (PoolMember member in listed.Where(m => m.ContainerName?.StartsWith(ContainerNamePrefix, StringComparison.Ordinal) == true))
+        foreach (PoolMember member in listed)
         {
+            // The guard verifies the container the member id names, so an entry whose name or target do not follow from its id is kept (N7, N3).
+            if (!IsListedMemberConsistent(member))
+            {
+                _logger.LogWarning("lab.pool a listed member does not match its container name; it is kept");
+                leftover++;
+                continue;
+            }
+
             // The registry does not survive a crash, so the listed member is registered again and then goes through the same
             // guard as every other destroy (live name, member label, context, tripwire). A member that fails the guard is kept.
             Result destroyed = Result.Failure("[Lab.Unavailable] no provider holds this member");
@@ -413,10 +448,38 @@ public sealed class PoolManager : ILeaseEndHook, ILabStatusSource, IHostedServic
             return Result<PoolMember>.Failure(registered.Error);
         }
 
-        Result<PoolMember> provisioned = await provider.ProvisionAsync(constraints, memberId, ct).ConfigureAwait(false);
+        // The member is listed in pool.json as Provisioning before its container starts, so a crash mid-provision leaves a
+        // recoverable entry for StartAsync (N2a).
+        var pending = new PoolMember(memberId, MemberTargetPrefix + memberId, containerName, provider.Dimensions, MemberState.Provisioning, _time.GetUtcNow());
+        lock (_state)
+        {
+            _members.Add(pending);
+            _leaseOf[memberId] = leaseId;
+        }
+
+        Result saved = await SaveAsync(ct).ConfigureAwait(false);
+        if (saved.IsFailure)
+        {
+            ForgetPending(memberId);
+            return Result<PoolMember>.Failure(saved.Error);
+        }
+
+        Result<PoolMember> provisioned;
+        try
+        {
+            provisioned = await provider.ProvisionAsync(constraints, memberId, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // The provider removed whatever its own run created; the pending entry goes with it.
+            ForgetPending(memberId);
+            _ = await SaveAsync(CancellationToken.None).ConfigureAwait(false);
+            throw;
+        }
+
         if (provisioned.IsFailure)
         {
-            _registry.Remove(MemberTargetPrefix + memberId);
+            ForgetPending(memberId);
             return provisioned;
         }
 
@@ -430,6 +493,7 @@ public sealed class PoolManager : ILeaseEndHook, ILabStatusSource, IHostedServic
         };
         lock (_state)
         {
+            _members.RemoveAll(m => m.MemberId == memberId);
             _members.Add(member);
             _leaseOf[memberId] = leaseId;
         }
@@ -437,12 +501,38 @@ public sealed class PoolManager : ILeaseEndHook, ILabStatusSource, IHostedServic
         return Result<PoolMember>.Success(member);
     }
 
+    /// <summary>Drops a member that never came up from the list and the lease map, and from the registry.</summary>
+    private void ForgetPending(string memberId)
+    {
+        _registry.Remove(MemberTargetPrefix + memberId);
+        lock (_state)
+        {
+            _members.RemoveAll(m => m.MemberId == memberId);
+            _leaseOf.Remove(memberId);
+        }
+    }
+
     private async Task<Result> DestroyOneAsync(PoolMember member, CancellationToken ct)
     {
         Result<ResolvedTarget> resolved = await _guard.ResolveAsync(member.TargetId, "reset", ct).ConfigureAwait(false);
         if (resolved.IsFailure)
         {
-            return Result.Failure(resolved.Error);
+            // A reset whose run failed has already removed the container; a Failed member with no container left is forgotten (N3).
+            bool gone = member.State == MemberState.Failed
+                && string.Equals(resolved.Error, "[Lab.BlastRadius] container could not be inspected", StringComparison.Ordinal);
+            if (!gone)
+            {
+                return Result.Failure(resolved.Error);
+            }
+
+            _registry.Remove(member.TargetId);
+            lock (_state)
+            {
+                _members.RemoveAll(m => m.MemberId == member.MemberId);
+                _leaseOf.Remove(member.MemberId);
+            }
+
+            return Result.Success();
         }
 
         IPoolProvider? provider = ProviderFor(member);
@@ -564,7 +654,37 @@ public sealed class PoolManager : ILeaseEndHook, ILabStatusSource, IHostedServic
         catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
         {
             _logger.LogWarning("lab.pool state could not be read: {ExceptionType}", ex.GetType().Name);
+            MoveUnreadableStateAside();
             return [];
         }
     }
+
+    /// <summary>
+    /// Keeps an unreadable <c>pool.json</c> as <c>pool.json.bad</c>, so the next save does not overwrite the recovery list (N2c).
+    /// </summary>
+    private void MoveUnreadableStateAside()
+    {
+        try
+        {
+            File.Move(_stateFile, _stateFile + ".bad", overwrite: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _logger.LogWarning("lab.pool unreadable state could not be kept aside: {ExceptionType}", ex.GetType().Name);
+        }
+    }
+
+    /// <summary>
+    /// A listed entry is trusted only when its id is a lab member id and its target and container name follow from that id.
+    /// </summary>
+    private static bool IsListedMemberConsistent(PoolMember member) =>
+        !string.IsNullOrEmpty(member.MemberId)
+        && IsSafeMemberId(member.MemberId)
+        && member.Dimensions is not null
+        && member.TargetId == MemberTargetPrefix + member.MemberId
+        && member.ContainerName == ContainerNamePrefix + member.MemberId;
+
+    /// <summary>The same shape the guard accepts: 1 to 32 characters of <c>[a-z0-9-]</c>.</summary>
+    private static bool IsSafeMemberId(string memberId) =>
+        memberId.Length is >= 1 and <= 32 && memberId.All(c => c is (>= 'a' and <= 'z') or (>= '0' and <= '9') or '-');
 }
