@@ -124,7 +124,7 @@ A running daemon writes `daemon.pid` under the lab root and removes it on stop. 
 
 ## Processes and logs
 
-- `LabProcessSupervisor` starts child processes with `ProcessStartInfo.ArgumentList` and `UseShellExecute=false`, redirects stdout and stderr, and removes `MERIDIAN_LAB_TOKEN` from every child environment. Each child is assigned to a Windows Job Object with kill-on-close, so a daemon exit takes its children with it. Stop uses `Kill(entireProcessTree: true)`.
+- `LabProcessSupervisor` starts child processes with `ProcessStartInfo.ArgumentList` and `UseShellExecute=false`, redirects stdout and stderr, and removes `MERIDIAN_LAB_TOKEN` from every child environment. Every child process is built through `LabProcessStart`, and the three builders (`LabBuilder`, `DockerCli` and the doctor's version check) strip the token too (`LabProcessStart.StripToken`), so the token never reaches a child even when it is set later or in a test host. Each child is assigned to a Windows Job Object with kill-on-close, so a daemon exit takes its children with it. Stop uses `Kill(entireProcessTree: true)`.
 - Process names match `[A-Za-z0-9_-]` (max 64). Every output line goes through the raw-line observer, then `Redactor`, then `JsonLogLineParser`. Only redacted text reaches the 20 000-line ring and `logs/<name>.jsonl`. Non-JSON lines are kept with level `Raw`.
 - `LogPathGuard` validates each log path with `PathValidator` against the logs folder and refuses any reparse point (symlink or junction) on the folder or the file.
 - Watchdog (D-ML19): a child that exits unexpectedly is relaunched only when a lease is held, its target is not faulted (`c:<name>` or `proc:<name>`), and fewer than 3 relaunches happened in the last 5 minutes. Otherwise it stays `crashed` (or `exited` when `Relaunch=false`). Faulted and stopped exits are not counted as restarts.
@@ -265,6 +265,11 @@ A Leased call's lease is watched for the whole call. If the lease expires, is re
 - **Files.** `run.json`, `rows\<section>\<row>.json`, `repro\repro.toml`, `ledger.md`, `fingerprint.json` and `logs\<process>.jsonl`. A log file holds the lines inside the run window, the latest 5000 per process, one JSON object per line (`ts`, `level`, `category`, `event_id`, `message`); each message passes `SensitiveText` and `Redactor`.
 - **Run and row fields.** `run.json` has `tools` (the distinct step tools) and `lease_owner`. Each row has `started_at` and `ended_at`, and `member`.
 - **Redaction.** Every file passes `Redactor`; `SecretScanner` runs last. A hit rewrites the bundle with every row BLOCKED.
+
+## Mutation runs
+
+- **Build stamp.** While a mutant build serves the services (set by `mutation_run` from build to restore, D-ML155), a detector bundle's `run.json` `build` takes the mutant build id, with `dirty` true and `checkout` empty. It also carries `build.mutant` (the mutant id), so the bundle says the services ran mutant code. A plain bundle has no `mutant` key. A failed restore keeps the mark, because the services may still run mutant code.
+- **Flake checks.** `results_flake_check` refuses a mutant detector run (`[Lab.InvalidArgument]`), and refuses any run while a mutant build serves the lab (`[Lab.Conflict]`). Rerun after `mutation_run` restores the plain build. Ingest compares grades only within one build id, so a mutant run never counts as a flake against a plain run.
 
 ## Invariants
 
