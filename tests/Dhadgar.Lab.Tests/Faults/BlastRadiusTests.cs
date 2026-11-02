@@ -15,7 +15,7 @@ using Microsoft.Extensions.Time.Testing;
 namespace Dhadgar.Lab.Tests.Faults;
 
 /// <summary>
-/// The blast-radius rules at the tool layer: every mutating tool that takes a target implements <see cref="IFaultTool"/>, and
+/// The blast-radius rules at the tool layer: every mutating tool that takes a target implements <see cref="IFaultTool"/> or is a guarded exec tool (D-ML167), and
 /// every fault tool refuses a target the guard must never let through.
 /// </summary>
 [Collection("LabHome")]
@@ -24,6 +24,18 @@ public sealed class BlastRadiusTests
     private static readonly DateTimeOffset Start = new(2026, 10, 28, 12, 0, 0, TimeSpan.Zero);
     private static readonly LabCallContext Context = new("call-blast-radius", null, "test");
     private static readonly string[] TargetProperties = ["target", "proxy", "member", "database", "file"];
+
+    /// <summary>
+    /// Leased tools that take a <c>member</c> but inject no fault: they exec in a pool member and resolve it through
+    /// <see cref="FaultTargetGuard.ResolveMemberForExecAsync"/>, which has no fault kind, so <c>fault_list_targets</c> never
+    /// lists them (D-ML167). Each entry names the fake-backed test that proves the guard refuses an unsafe member before any
+    /// exec. A new entry needs the same proof; it is not a skip list.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, (string TestType, string TestMethod)> GuardedExecTools =
+        new Dictionary<string, (string TestType, string TestMethod)>(StringComparer.Ordinal)
+        {
+            ["cli_run"] = ("Dhadgar.Lab.Tests.Cli.CliRunToolTests", "UnlabelledMember_IsBlastRadius_AndNeverExecs"),
+        };
 
     [Fact]
     public async Task EveryLeasedToolWithATarget_ImplementsIFaultTool()
@@ -37,13 +49,45 @@ public sealed class BlastRadiusTests
             foreach (ILabTool tool in daemon.Services.GetServices<ILabTool>())
             {
                 bool leased = ToolPolicy.GateFor(tool.Name) == LabGate.Leased;
-                if (leased && HasTargetProperty(tool.InputSchema) && tool is not IFaultTool)
+                if (leased && HasTargetProperty(tool.InputSchema) && tool is not IFaultTool && !GuardedExecTools.ContainsKey(tool.Name))
                 {
                     missing.Add(tool.Name);
                 }
             }
 
             Assert.Empty(missing);
+        }
+        finally
+        {
+            DeleteRoot(root);
+        }
+    }
+
+    [Fact]
+    public async Task EveryGuardedExecTool_IsALeasedMemberTool_ThatTakesTheGuard_AndHasAGuardTest()
+    {
+        string root = NewRoot();
+        try
+        {
+            await using LabDaemon daemon = await StartDaemonAsync(root);
+            ILabTool[] tools = daemon.Services.GetServices<ILabTool>().ToArray();
+
+            foreach (KeyValuePair<string, (string TestType, string TestMethod)> entry in GuardedExecTools)
+            {
+                string name = entry.Key;
+                (string testType, string testMethod) = entry.Value;
+                ILabTool? tool = tools.SingleOrDefault(t => string.Equals(t.Name, name, StringComparison.Ordinal));
+                Assert.True(tool is not null, name + " is not registered");
+                Assert.Equal(LabGate.Leased, ToolPolicy.GateFor(name));
+                Assert.True(tool!.InputSchema.TryGetProperty("properties", out JsonElement properties) && properties.TryGetProperty("member", out _), name + " has no member property");
+                Assert.False(tool is IFaultTool, name + " is an IFaultTool; remove its GuardedExecTools entry");
+
+                var constructor = Assert.Single(tool.GetType().GetConstructors());
+                Assert.Contains(constructor.GetParameters(), p => p.ParameterType == typeof(FaultTargetGuard));
+
+                Type? proof = typeof(BlastRadiusTests).Assembly.GetType(testType);
+                Assert.True(proof?.GetMethod(testMethod) is not null, name + " cites a guard test that does not exist");
+            }
         }
         finally
         {
