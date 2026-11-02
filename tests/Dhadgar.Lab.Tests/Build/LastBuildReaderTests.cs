@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.Build;
+using Dhadgar.Lab.Mutants;
 using Dhadgar.Lab.Uat.Bundle;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
@@ -65,6 +66,34 @@ public sealed class LastBuildReaderTests : IDisposable
 
         Assert.Equal(BuildId, stamp.Id);
         Assert.Equal(string.Empty, stamp.Checkout);
+    }
+
+    [Fact]
+    public void Read_WithMark_ReturnsMutantStamp()
+    {
+        WriteBuild(Path.Combine(_repo, "src", "lab"));
+        var running = new RunningMutantBuild();
+        running.Set(new MutantMark("mutant-m1-0123abcd", "m1", "0123abcd4567ef89"));
+
+        BuildStamp stamp = LastBuildReader.Read(_paths, _validator, running);
+
+        Assert.Equal("mutant-m1-0123abcd", stamp.Id);
+        Assert.Equal("0123abcd4567ef89", stamp.Commit);
+        Assert.True(stamp.Dirty);
+        Assert.Equal(string.Empty, stamp.Checkout);
+        Assert.Equal("m1", stamp.Mutant);
+    }
+
+    [Fact]
+    public void Read_NoMark_ReturnsLatest()
+    {
+        WriteBuild(Path.Combine(_repo, "src", "lab"));
+
+        BuildStamp stamp = LastBuildReader.Read(_paths, _validator, new RunningMutantBuild());
+
+        Assert.Equal(BuildId, stamp.Id);
+        Assert.Equal("src/lab", stamp.Checkout);
+        Assert.Null(stamp.Mutant);
     }
 
     public void Dispose()

@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.Jobs;
+using Dhadgar.Lab.Mutants;
 using Dhadgar.Lab.Tools;
 using Dhadgar.Lab.Uat;
 using Dhadgar.Lab.Uat.Bundle;
@@ -59,8 +60,9 @@ public static class FlakeCheckJob
     /// <param name="rowIds">The row ids to rerun, or null for the failed rows.</param>
     /// <param name="reruns">The number of reruns, 1 to <see cref="MaxReruns"/>.</param>
     /// <param name="ct">The cancellation token.</param>
+    /// <param name="running">The mutant build serving the lab, or null; while one serves, no rerun is planned (D-ML155).</param>
     public static async Task<Result<FlakeCheckPlan>> PlanAsync(string uatRuns, IPathValidator validator, string runId,
-        IReadOnlyList<string>? rowIds, int reruns, CancellationToken ct)
+        IReadOnlyList<string>? rowIds, int reruns, CancellationToken ct, MutantMark? running = null)
     {
         ArgumentNullException.ThrowIfNull(validator);
         if (reruns < 1 || reruns > MaxReruns)
@@ -83,6 +85,17 @@ public static class FlakeCheckJob
         if (run.IsFailure)
         {
             return Result<FlakeCheckPlan>.Failure(run.Error);
+        }
+
+        BuildStamp source = BuildStamp.FromRunJson(run.Value!);
+        if (source.Mutant is not null || source.Id.StartsWith("mutant-", StringComparison.Ordinal))
+        {
+            return Result<FlakeCheckPlan>.Failure("[Lab.InvalidArgument] a mutant detector run cannot be rerun on the current build");
+        }
+
+        if (running is not null)
+        {
+            return Result<FlakeCheckPlan>.Failure("[Lab.Conflict] a mutant build is serving the lab; rerun after mutation_run restores it");
         }
 
         string? specFile = SpecFileOf(run.Value!);

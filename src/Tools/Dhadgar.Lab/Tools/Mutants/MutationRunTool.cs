@@ -95,7 +95,8 @@ public sealed class MutationRunTool : LabTool<MutationRunArgs>
             _pacer,
             _validator,
             _time,
-            _services.GetRequiredService<Redactor>());
+            _services.GetRequiredService<Redactor>(),
+            _services.GetRequiredService<RunningMutantBuild>());
 
         Result<JobHandle> started = _jobs.Start(MutationRunJob.Kind, LabRandom.NewSeed(), (jobContext, token) =>
             job.RunAsync(jobContext.JobId, jobContext.LeaseId, jobContext.Folder, token));

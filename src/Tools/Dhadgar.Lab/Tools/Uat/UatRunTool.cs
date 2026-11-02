@@ -4,6 +4,7 @@ using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.Build;
 using Dhadgar.Lab.Docker;
 using Dhadgar.Lab.Http;
+using Dhadgar.Lab.Mutants;
 using Dhadgar.Lab.Observe;
 using Dhadgar.Lab.Results;
 using Dhadgar.Lab.Secrets;
@@ -208,7 +209,7 @@ public sealed class UatRunTool : LabTool<UatRunArgs>
             system: RuntimeInformation.OSDescription,
             build: string.Empty,
             label: label);
-        sink.UseBuild(LastBuildReader.Read(_paths, _validator));
+        sink.UseBuild(LastBuildReader.Read(_paths, _validator, _services.GetService<RunningMutantBuild>()));
         sink.UseKnownIssues(_services.GetRequiredService<ResultsService>().LoadKnownIssues());
         IRunLogSource? logs = _services.GetService<IRunLogSource>();
         if (logs is not null)

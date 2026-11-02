@@ -1,3 +1,4 @@
+using Dhadgar.Lab.Mutants;
 using Dhadgar.Lab.Tools;
 using Dhadgar.Lab.Tools.Mutants;
 using Microsoft.Extensions.DependencyInjection;
@@ -12,6 +13,7 @@ public static partial class LabMcpServer
 {
     static partial void AddMutantsArea(IServiceCollection services)
     {
+        services.AddSingleton<RunningMutantBuild>();
         AddLabTool<MutationRunTool>(services);
     }
 }

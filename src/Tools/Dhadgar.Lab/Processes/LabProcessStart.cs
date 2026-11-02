@@ -36,11 +36,7 @@ internal static class LabProcessStart
             startInfo.ArgumentList.Add(argument);
         }
 
-        // The daemon token must never reach a child, whatever the spec carries.
-        foreach (string key in startInfo.Environment.Keys.Where(IsTokenName).ToList())
-        {
-            _ = startInfo.Environment.Remove(key);
-        }
+        StripToken(startInfo);
 
         foreach (KeyValuePair<string, string> pair in spec.Environment)
         {
@@ -71,6 +67,20 @@ internal static class LabProcessStart
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or IOException)
         {
             return Result.Failure("[Lab.Process] the process could not be started");
+        }
+    }
+
+    /// <summary>
+    /// Removes every <c>MERIDIAN_LAB_TOKEN</c> key (any case) from the child environment of <paramref name="info"/>. Every lab
+    /// child is built through this helper (the three builders call it too), so a token never reaches a child (H3).
+    /// </summary>
+    /// <param name="info">The start info to clean; its environment is changed in place.</param>
+    internal static void StripToken(ProcessStartInfo info)
+    {
+        ArgumentNullException.ThrowIfNull(info);
+        foreach (string key in info.Environment.Keys.Where(IsTokenName).ToList())
+        {
+            _ = info.Environment.Remove(key);
         }
     }
 

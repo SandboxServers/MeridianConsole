@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text.Json.Nodes;
 using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.Docker;
+using Dhadgar.Lab.Processes;
 using Dhadgar.Shared.Results;
 
 namespace Dhadgar.Lab.Build;
@@ -480,6 +481,8 @@ public static class LabBuilder
         {
             info.ArgumentList.Add(arg);
         }
+
+        LabProcessStart.StripToken(info);
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(ProcessTimeout);

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Dhadgar.Agent.Core.Files;
+using Dhadgar.Lab.Mutants;
 using Dhadgar.Lab.Uat.Bundle;
 using Dhadgar.Shared.Results;
 
@@ -12,6 +13,18 @@ namespace Dhadgar.Lab.Build;
 /// </summary>
 public static class LastBuildReader
 {
+    /// <summary>
+    /// The stamp for a bundle made now: the mutant build's stamp while a mutant build serves the services (D-ML155), otherwise
+    /// <see cref="Read(LabPaths, IPathValidator)"/>. Never throws.
+    /// </summary>
+    /// <param name="paths">The lab paths.</param>
+    /// <param name="validator">Validates both files against the builds root.</param>
+    /// <param name="running">The running mutant build, or null when none is registered.</param>
+    public static BuildStamp Read(LabPaths paths, IPathValidator validator, RunningMutantBuild? running) =>
+        running?.Current is { } mark
+            ? new BuildStamp(mark.BuildId, mark.Commit, Dirty: true, Checkout: string.Empty, Mutant: mark.MutantId)
+            : Read(paths, validator);
+
     /// <summary>
     /// Returns the latest build's stamp, or <see cref="BuildStamp.None"/> when there is none or it cannot be read. Never throws.
     /// </summary>
