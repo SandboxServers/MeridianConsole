@@ -382,3 +382,9 @@ Teardown: `stack_down` wipe (state down, network absent, containers []); lease r
 
 Last check result line: Dhadgar.Lab.Tests non-Docker suite Passed 1491, Failed 0, Skipped 5, Total 1496 (`RequiresDocker!=true`). Teardown clean.
 Next step: none. The boundary-close ruling is the architect's (ruling section 7).
+
+## Docker run 12
+
+Raw record: [wave5-docker-run-12](../../../../.claude/reports/meridian-lab/wave5-docker-run-12.md). L19n red (scratch 261a9ed5): Failed 1 at the heal wait (The nodes-postgres listener did not accept connections 10 s after it was enabled.), green not run. L34 AuthStackDockerTests: Failed 1 (identity did not answer 200 within 90 s; last status connection refused or reset). L36 NotifyDockerTests: Failed 1 (
+otifications did not answer 200 within 90 s; last status HTTP 503). Teardown clean after each run.
+
