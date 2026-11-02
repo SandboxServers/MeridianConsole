@@ -50,6 +50,7 @@ public sealed class CliMemberConfigTests
         using JsonDocument doc = JsonDocument.Parse(CliMemberInstall.RenderMemberConfig(null));
 
         Assert.Equal("http://meridian-lab-gateway:8080", doc.RootElement.GetProperty("gateway_url").GetString());
+        Assert.Equal("http://meridian-lab-notifications:8080", doc.RootElement.GetProperty("notifications_url").GetString());
         Assert.False(doc.RootElement.TryGetProperty("admin_api_key", out _));
     }
 

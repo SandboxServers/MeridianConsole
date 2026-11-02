@@ -159,14 +159,21 @@ public static class CliMemberInstall
     /// <summary>The Gateway the member's CLI calls: the lab network name, not a host port.</summary>
     public const string MemberGatewayUrl = "http://meridian-lab-gateway:8080";
 
+    /// <summary>The Notifications service the CLI calls direct for admin commands (the lab network name, as in ProxyCatalog).</summary>
+    public const string MemberNotificationsUrl = "http://meridian-lab-notifications:8080";
+
     /// <summary>
-    /// The member's <c>config.json</c> text: <c>gateway_url</c>, and <c>admin_api_key</c> when one is given (the CLI's
-    /// <c>CliConfig</c> reads both). Client credentials are not written: <c>auth login</c> takes its secret only from
-    /// <c>--client-secret</c> or a prompt, never from this file.
+    /// The member's <c>config.json</c> text: <c>gateway_url</c>, <c>notifications_url</c>, and <c>admin_api_key</c> when
+    /// one is given (the CLI's <c>CliConfig</c> reads them all). Client credentials are not written: <c>auth login</c>
+    /// takes its secret only from <c>--client-secret</c> or a prompt, never from this file.
     /// </summary>
     public static string RenderMemberConfig(string? adminApiKey)
     {
-        var values = new Dictionary<string, string>(StringComparer.Ordinal) { ["gateway_url"] = MemberGatewayUrl };
+        var values = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["gateway_url"] = MemberGatewayUrl,
+            ["notifications_url"] = MemberNotificationsUrl,
+        };
         if (!string.IsNullOrEmpty(adminApiKey))
         {
             values["admin_api_key"] = adminApiKey;

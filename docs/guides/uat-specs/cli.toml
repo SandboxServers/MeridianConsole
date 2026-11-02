@@ -1,0 +1,201 @@
+schema = 1
+
+# The lab CLI in a Linux container member (L37, F30). Every row runs `cli_run`, which runs /opt/lab/cli/dhadgar with
+# HOME=/home/lab inside the member (never on the host). The member's config.json holds gateway_url, notifications_url and,
+# once seeded, admin_api_key (Tools/Cli/CliRunTool.cs). The CLI's `auth login` takes its client secret only from
+# --client-secret, so auth-login and gateway-down pass the CLI's documented development placeholders (dev-client,
+# dev-secret). Those are not lab secrets; the security review (L37 "yes") confirms they match the lab's identity seed.
+# Output from cli_run is redacted before it returns (R-LOG).
+# Rows: version (no stack), auth-login (client_credentials through the Gateway), nodes-list (after one enroll through the
+# Gateway), notifications-admin (direct, with the admin key: it fails until the key is seeded), gateway-down (Identity
+# route cut: auth login exits non-zero with a readable error, no stack trace).
+
+[section]
+id = "cli"
+title = "Lab CLI in a Linux container member"
+sequential = true
+requires = ["docker"]
+allow_invariants = []
+requires_pool = { os = "linux", kind = "container" }
+
+[[row]]
+id = "version"
+title = "The CLI in the member prints its version"
+expected = "cli_run --version exits 0 with non-empty stdout"
+
+  [[row.step]]
+  id = "version"
+  tool = "cli_run"
+  args = { member = "${member}", args = ["--version"] }
+
+  [[row.expect]]
+  id = "version-exit"
+  text = "the CLI exits 0"
+  source = "step"
+  step = "version"
+  pointer = "/result/exit_code"
+  op = "eq"
+  value = 0
+  required = true
+
+  [[row.expect]]
+  id = "version-stdout"
+  text = "the CLI prints a version"
+  source = "step"
+  step = "version"
+  pointer = "/result/stdout"
+  op = "ne"
+  value = ""
+  required = true
+
+[[row]]
+id = "auth-login"
+title = "auth login (client_credentials) through the Gateway returns a token"
+expected = "cli_run auth login exits 0; the token is stored in the member's config and never printed"
+
+  [[row.step]]
+  id = "up"
+  tool = "stack_up"
+  args = { wipe = true }
+
+  [[row.step]]
+  id = "login"
+  tool = "cli_run"
+  args = { member = "${member}", args = ["auth", "login", "--client-id", "dev-client", "--client-secret", "dev-secret"] }
+
+  [[row.expect]]
+  id = "login-exit"
+  text = "auth login exits 0"
+  source = "step"
+  step = "login"
+  pointer = "/result/exit_code"
+  op = "eq"
+  value = 0
+  required = true
+
+  [[row.expect]]
+  id = "login-no-secret-echo"
+  text = "stdout does not echo the client secret"
+  source = "step"
+  step = "login"
+  pointer = "/result/stdout"
+  op = "not_contains"
+  value = "dev-secret"
+  required = true
+
+[[row]]
+id = "nodes-list"
+title = "nodes list shows the node that enrolled through the Gateway"
+expected = "after one enroll through the Gateway (201), cli_run nodes list exits 0"
+
+  [[row.step]]
+  id = "up"
+  tool = "stack_up"
+  args = { wipe = true }
+
+  [[row.step]]
+  id = "start-nodes"
+  tool = "svc_start"
+  args = { service = "nodes" }
+
+  [[row.step]]
+  id = "start-gateway"
+  tool = "svc_start"
+  args = { service = "gateway" }
+
+  [[row.step]]
+  id = "mint"
+  tool = "nodes_token_mint"
+  args = { label = "cli-list-${run_id}" }
+  capture = { token_ref = "/token_ref" }
+
+  [[row.step]]
+  id = "probe"
+  tool = "nodes_enroll_probe"
+  args = { token_ref = "${token_ref}", platform = "linux", via = "gateway" }
+
+  [[row.step]]
+  id = "list"
+  tool = "cli_run"
+  args = { member = "${member}", args = ["nodes", "list"] }
+
+  [[row.expect]]
+  id = "enroll-201"
+  text = "the gateway enroll returns 201"
+  source = "step"
+  step = "probe"
+  pointer = "/result/status"
+  op = "eq"
+  value = 201
+  required = true
+
+  [[row.expect]]
+  id = "list-exit"
+  text = "nodes list exits 0"
+  source = "step"
+  step = "list"
+  pointer = "/result/exit_code"
+  op = "eq"
+  value = 0
+  required = true
+
+[[row]]
+id = "notifications-admin"
+title = "notifications logs answers direct with the admin key"
+expected = "cli_run notifications logs exits 0 against the Notifications service; fails until pool_acquire seeds admin_api_key"
+
+  [[row.step]]
+  id = "logs"
+  tool = "cli_run"
+  args = { member = "${member}", args = ["notifications", "logs"] }
+
+  [[row.expect]]
+  id = "logs-exit"
+  text = "notifications logs exits 0"
+  source = "step"
+  step = "logs"
+  pointer = "/result/exit_code"
+  op = "eq"
+  value = 0
+  required = true
+
+[[row]]
+id = "gateway-down"
+title = "auth login fails readably when the Gateway's Identity route is cut"
+expected = "with gateway-identity disabled, auth login exits non-zero; stderr shows a readable error, no stack trace"
+
+  [[row.fault]]
+  id = "identity-route"
+  inject = { tool = "fault_proxy_disable", args = { proxy = "gateway-identity" } }
+  start = "after_step:up"
+  heal = "after_steps"
+
+  [[row.step]]
+  id = "up"
+  tool = "stack_up"
+  args = { wipe = true }
+
+  [[row.step]]
+  id = "login-down"
+  tool = "cli_run"
+  args = { member = "${member}", args = ["auth", "login", "--client-id", "dev-client", "--client-secret", "dev-secret"] }
+
+  [[row.expect]]
+  id = "login-fails"
+  text = "auth login exits non-zero while the Identity route is cut"
+  source = "step"
+  step = "login-down"
+  pointer = "/result/exit_code"
+  op = "ne"
+  value = 0
+  required = true
+
+  [[row.expect]]
+  id = "no-stack-trace"
+  text = "stderr has no stack trace"
+  source = "step"
+  step = "login-down"
+  pointer = "/result/stderr"
+  op = "not_contains"
+  value = "   at "
+  required = true
