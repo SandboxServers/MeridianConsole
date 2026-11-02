@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Reflection;
 using Dhadgar.Agent.Core.Files;
+using Dhadgar.Lab;
 using Dhadgar.Lab.Build;
 using Dhadgar.Shared.Results;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -141,5 +142,32 @@ public sealed class LabBuilderTests
         }
 
         Assert.True(Process.GetProcessesByName(process).Length <= before);
+    }
+
+    [Fact]
+    public async Task RunAsync_ChildDoesNotInheritTheDaemonToken()
+    {
+        const string secret = "lab-token-must-not-reach-a-child";
+        string? previous = Environment.GetEnvironmentVariable(LabDefaults.TokenEnvVar);
+        Environment.SetEnvironmentVariable(LabDefaults.TokenEnvVar, secret);
+        try
+        {
+            string fileName = OperatingSystem.IsWindows() ? "cmd" : "sh";
+            var args = OperatingSystem.IsWindows()
+                ? new List<string> { "/c", "echo %" + LabDefaults.TokenEnvVar + "%" }
+                : new List<string> { "-c", "printf %s \"$" + LabDefaults.TokenEnvVar + "\"" };
+            MethodInfo run = typeof(LabBuilder).GetMethod("RunAsync", BindingFlags.NonPublic | BindingFlags.Static)
+                ?? throw new InvalidOperationException("LabBuilder.RunAsync not found");
+
+            var task = (Task<Result<string>>)run.Invoke(null, [fileName, args, Environment.CurrentDirectory, CancellationToken.None])!;
+            Result<string> result = await task;
+
+            Assert.True(result.IsSuccess, result.Error);
+            Assert.DoesNotContain(secret, result.Value!, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(LabDefaults.TokenEnvVar, previous);
+        }
     }
 }
