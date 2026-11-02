@@ -4,6 +4,7 @@ using Dhadgar.Lab.Invariants;
 using Dhadgar.Lab.Leasing;
 using Dhadgar.Lab.Observe;
 using Dhadgar.Lab.Policy;
+using Dhadgar.Lab.Pool;
 using Dhadgar.Lab.Tools;
 using Dhadgar.Lab.Uat.Eval;
 using Dhadgar.Lab.Uat.Spec;
@@ -42,13 +43,15 @@ internal sealed class RowExecutor
     private readonly ILabObservationSink? _observations;
     private readonly Func<InvariantWindow, CancellationToken, Task<InvariantReport>> _checkpoint;
     private readonly TimeSpan _settle;
+    private readonly Func<string, CancellationToken, Task<Result<PoolMember>>>? _resetMember;
 
     /// <summary>
     /// Creates the executor. With <paramref name="observations"/> every step is recorded in the run's <c>events.jsonl</c> (C18).
     /// <paramref name="checkpoint"/> runs one invariant checkpoint over a row window. <paramref name="settle"/> is the wait after a row with faults; zero skips it.
     /// </summary>
-    public RowExecutor(LabToolDispatcher dispatcher, LeaseBook leases, ClauseEvaluator evaluator, TimeProvider time, ILabObservationSink? observations, Func<InvariantWindow, CancellationToken, Task<InvariantReport>> checkpoint, TimeSpan settle)
+    public RowExecutor(LabToolDispatcher dispatcher, LeaseBook leases, ClauseEvaluator evaluator, TimeProvider time, ILabObservationSink? observations, Func<InvariantWindow, CancellationToken, Task<InvariantReport>> checkpoint, TimeSpan settle, Func<string, CancellationToken, Task<Result<PoolMember>>>? resetMember = null)
     {
+        _resetMember = resetMember;
         _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
         _leases = leases ?? throw new ArgumentNullException(nameof(leases));
         _evaluator = evaluator ?? throw new ArgumentNullException(nameof(evaluator));
@@ -74,7 +77,13 @@ internal sealed class RowExecutor
             return Blocked(row, LabNotCleanReason);
         }
 
-        if (spec.Section.RequiresPool is not null)
+        bool pooled = spec.Section.RequiresPool is not null;
+        if (pooled && run.PoolError is not null)
+        {
+            return Skipped(row, "pool: " + run.PoolError);
+        }
+
+        if (pooled && (run.Members.Count == 0 || _resetMember is null))
         {
             return Skipped(row, PoolDeferred);
         }
@@ -92,12 +101,32 @@ internal sealed class RowExecutor
             }
         }
 
+        if (pooled)
+        {
+            // Every row starts on a fresh member unless it opts out; the first row follows the provisioning. The host is read-only and never reset.
+            if (!row.ReuseMember && !run.MembersFresh)
+            {
+                foreach (string member in run.Members.Where(m => m != "host"))
+                {
+                    Result<PoolMember> reset = await _resetMember!(member, ct).ConfigureAwait(false);
+                    if (reset.IsFailure)
+                    {
+                        return Blocked(row, reset.Error) with { Member = run.Members[0] };
+                    }
+                }
+            }
+
+            run.MembersFresh = false;
+            UatRowResult pooledResult = await ExecuteRowAsync(spec, row, extraFaults, run, ct).ConfigureAwait(false);
+            return pooledResult with { Member = run.Members[0] };
+        }
+
         return await ExecuteRowAsync(spec, row, extraFaults, run, ct).ConfigureAwait(false);
     }
 
     private async Task<UatRowResult> ExecuteRowAsync(UatSpec spec, UatRow row, IReadOnlyList<UatFault> extraFaults, RunContext run, CancellationToken ct)
     {
-        var vars = new UatVars(run.RunId, row.Id, spec.Section.Id, run.Seed, null);
+        var vars = new UatVars(run.RunId, row.Id, spec.Section.Id, run.Seed, run.Members.Count > 0 ? run.Members[0] : null);
         var stepStarts = new Dictionary<string, DateTimeOffset>(StringComparer.Ordinal);
         var steps = new Dictionary<string, StepOutcome>(StringComparer.Ordinal);
         var heals = new Dictionary<string, DateTimeOffset>(StringComparer.Ordinal);
@@ -653,6 +682,15 @@ internal sealed class RowExecutor
         public DateTimeOffset RunStart { get; }
 
         public bool LeaseLost { get; set; }
+
+        /// <summary>The pool members the section's <c>requires_pool</c> acquired (L30). Empty when the section has none or the pool failed.</summary>
+        public IReadOnlyList<string> Members { get; set; } = [];
+
+        /// <summary>The pool error that makes every row of a <c>requires_pool</c> section SKIPPED; null when the pool is fine.</summary>
+        public string? PoolError { get; set; }
+
+        /// <summary>True until the first row has run: the members were just provisioned, so that row needs no reset.</summary>
+        public bool MembersFresh { get; set; } = true;
 
         /// <summary>Set when a heal failed and faults were still in place after reset (R-REG). Every remaining row is BLOCKED.</summary>
         public bool LabNotClean { get; set; }

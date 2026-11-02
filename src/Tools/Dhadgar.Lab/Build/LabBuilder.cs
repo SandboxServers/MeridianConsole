@@ -104,6 +104,13 @@ public static class LabBuilder
     /// <summary>Image tag for a project at a build: <c>meridian-lab/&lt;project&gt;:&lt;build_id&gt;</c>.</summary>
     public static string ImageTag(string project, string buildId) => $"meridian-lab/{project}:{buildId}";
 
+    /// <summary>The tag <c>lab_build</c> gives the newest Linux member image: <c>meridian-lab/linux-member:latest</c>.</summary>
+    public const string LinuxMemberLatestTag = "meridian-lab/linux-member:latest";
+
+    /// <summary>Docker arguments that tag a built Linux member image as the latest one the pool uses.</summary>
+    /// <param name="memberTag">The build-id tag from <see cref="ImageTag"/>.</param>
+    public static IReadOnlyList<string> LinuxMemberLatestTagArgs(string memberTag) => ["tag", memberTag, LinuxMemberLatestTag];
+
     /// <summary>Lock-file drift marker returned when restore would change a lock file.</summary>
     public const string LockDriftError = "[Lab.ProcessFailed] lock file drift";
 
@@ -196,6 +203,38 @@ public static class LabBuilder
             }
 
             images.Add(tag);
+
+            // The probe also ships as the Linux pool member image (L30); the member image carries no service.
+            if (project.Name == "probe")
+            {
+                Result<string> memberDockerfile = validator.ValidatePath(Path.Combine(checkoutPath, "tools", "lab", "images", "linux-member.Dockerfile"), [checkoutPath]);
+                if (memberDockerfile.IsFailure)
+                {
+                    return Result<LabBuildDto>.Failure("[Lab.InvalidArgument] build path is not valid");
+                }
+
+                string memberTag = ImageTag("linux-member", buildId);
+                Result<DockerOutput> member = await docker.RunAsync(
+                    DockerEngine.Linux,
+                    DockerBuildArgs(memberTag, project.DllName, publishDir.Value!, memberDockerfile.Value!),
+                    ct).ConfigureAwait(false);
+                if (member.IsFailure || member.Value!.ExitCode != 0)
+                {
+                    return Result<LabBuildDto>.Failure("[Lab.Docker] docker build failed");
+                }
+
+                images.Add(memberTag);
+
+                // The pool's default image is the latest member image (LinuxContainerProvider.DefaultImage).
+                Result<DockerOutput> latest = await docker.RunAsync(
+                    DockerEngine.Linux,
+                    LinuxMemberLatestTagArgs(memberTag),
+                    ct).ConfigureAwait(false);
+                if (latest.IsFailure || latest.Value!.ExitCode != 0)
+                {
+                    return Result<LabBuildDto>.Failure("[Lab.Docker] docker tag failed");
+                }
+            }
         }
 
         var projectNames = projects.Select(project => project.Name).ToList();

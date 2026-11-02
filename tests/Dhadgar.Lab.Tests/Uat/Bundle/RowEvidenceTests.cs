@@ -192,6 +192,33 @@ public sealed class RowEvidenceTests : IDisposable
     }
 
     [Fact]
+    public async Task RunJson_ListsTheMembersOfPooledRows()
+    {
+        SpecLoadOutcome loaded = SpecLoader.LoadText("row-evidence.toml", EvidenceSpec);
+        Assert.NotNull(loaded.Spec);
+        _writer.RunStarted("run-l30-members", 11UL, loaded.Spec!);
+        _writer.RowFinished(new UatRowResult("evidence", RowGrade.Pass, "fine", [], Member: "lin-01"));
+        _writer.RunFinished(new UatRunResult("run-l30-members", 11UL, false, RunOverall.Incomplete, []));
+
+        using JsonDocument run = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(_writer.Folder!, "run.json")));
+        string[] members = run.RootElement.GetProperty("members").EnumerateArray().Select(m => m.GetString()!).ToArray();
+        Assert.Equal(["lin-01"], members);
+    }
+
+    [Fact]
+    public async Task RunJson_HasNoMembers_WhenNoRowWasPooled()
+    {
+        SpecLoadOutcome loaded = SpecLoader.LoadText("row-evidence.toml", EvidenceSpec);
+        Assert.NotNull(loaded.Spec);
+        _writer.RunStarted("run-l30-nomembers", 12UL, loaded.Spec!);
+        _writer.RowFinished(new UatRowResult("evidence", RowGrade.Pass, "fine", []));
+        _writer.RunFinished(new UatRunResult("run-l30-nomembers", 12UL, false, RunOverall.Incomplete, []));
+
+        using JsonDocument run = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(_writer.Folder!, "run.json")));
+        Assert.Empty(run.RootElement.GetProperty("members").EnumerateArray());
+    }
+
+    [Fact]
     public void UnevaluatedSkip_IsCountedInRunJson_AndNamedInWarnings()
     {
         // I5 queues skipped at run end (D-ML80): the grade stays, but run.json says how many sources were not evaluated (N2).

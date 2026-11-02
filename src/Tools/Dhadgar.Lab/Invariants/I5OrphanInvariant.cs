@@ -23,6 +23,9 @@ public sealed class I5OrphanInvariant : ISkippableInvariant
     /// <summary>The docker label every mutant image and container carries, with its id as the value (D-ML51, L54).</summary>
     public const string MutantLabelFilter = "label=meridian-lab-mutant";
 
+    /// <summary>The docker label every pool member container carries, with its member id as the value (L30).</summary>
+    public const string MemberLabelFilter = "label=meridian-lab-member";
+
     private const string ProxyDisableKind = "proxy_disable";
 
     private readonly Func<CancellationToken, Task<Result<IReadOnlyList<string>>>> _containers;
@@ -34,12 +37,16 @@ public sealed class I5OrphanInvariant : ISkippableInvariant
     private readonly Func<bool>? _stackCreated;
     private readonly Func<CancellationToken, Task<Result<IReadOnlyList<string>>>>? _mutantContainers;
     private readonly Func<bool>? _mutationRunning;
+    private readonly Func<CancellationToken, Task<Result<IReadOnlyList<string>>>>? _memberContainers;
+    private readonly Func<IReadOnlyList<string>>? _poolMembers;
 
     /// <summary>
     /// Creates the check over the five sources. <paramref name="stackCreated"/> says whether stack_up has created the lab
     /// credentials; while it is false the queues and proxies do not exist yet and are skipped (D-ML80). Null means always created.
     /// <paramref name="mutantContainers"/> lists the containers with the mutant label; each one is a violation while
     /// <paramref name="mutationRunning"/> says no <c>mutation</c> job runs (L54). Null for either leaves that source out.
+    /// <paramref name="memberContainers"/> lists the containers with the <c>meridian-lab-member</c> label; each one that
+    /// <paramref name="poolMembers"/> does not list as a live pool member is an orphan (L30). Null for either leaves it out.
     /// </summary>
     public I5OrphanInvariant(
         Func<CancellationToken, Task<Result<IReadOnlyList<string>>>> containers,
@@ -50,10 +57,14 @@ public sealed class I5OrphanInvariant : ISkippableInvariant
         Func<IReadOnlyList<string>> backupFolders,
         Func<bool>? stackCreated = null,
         Func<CancellationToken, Task<Result<IReadOnlyList<string>>>>? mutantContainers = null,
-        Func<bool>? mutationRunning = null)
+        Func<bool>? mutationRunning = null,
+        Func<CancellationToken, Task<Result<IReadOnlyList<string>>>>? memberContainers = null,
+        Func<IReadOnlyList<string>>? poolMembers = null)
     {
         _mutantContainers = mutantContainers;
         _mutationRunning = mutationRunning;
+        _memberContainers = memberContainers;
+        _poolMembers = poolMembers;
         _containers = containers ?? throw new ArgumentNullException(nameof(containers));
         _registry = registry ?? throw new ArgumentNullException(nameof(registry));
         _queues = queues ?? throw new ArgumentNullException(nameof(queues));
@@ -78,6 +89,12 @@ public sealed class I5OrphanInvariant : ISkippableInvariant
     /// </summary>
     public static Task<Result<IReadOnlyList<string>>> ListMutantContainersAsync(IDockerCli docker, DockerEngine engine, CancellationToken ct) =>
         ListByLabelsAsync(docker, engine, [LabelFilter, MutantLabelFilter], ct);
+
+    /// <summary>
+    /// Lists the names of every container that carries the pool member label (L30), through <c>docker ps -a</c>.
+    /// </summary>
+    public static Task<Result<IReadOnlyList<string>>> ListMemberContainersAsync(IDockerCli docker, DockerEngine engine, CancellationToken ct) =>
+        ListByLabelsAsync(docker, engine, [MemberLabelFilter], ct);
 
     private static async Task<Result<IReadOnlyList<string>>> ListByLabelsAsync(IDockerCli docker, DockerEngine engine, string[] labelFilters, CancellationToken ct)
     {
@@ -154,6 +171,25 @@ public sealed class I5OrphanInvariant : ISkippableInvariant
                 foreach (string name in mutants.Value)
                 {
                     violations.Add(Violation(name, "mutant-outside-job", $"mutant container {name} is labelled meridian-lab-mutant while no mutation job runs", window));
+                }
+            }
+        }
+
+        if (_memberContainers is not null && _poolMembers is not null)
+        {
+            // L30: a member container is an orphan when the pool does not list it as a live member.
+            Result<IReadOnlyList<string>> members = await _memberContainers(ct).ConfigureAwait(false);
+            if (members.IsFailure)
+            {
+                return Failed("member containers", members.Error);
+            }
+
+            HashSet<string> pooled = _poolMembers().ToHashSet(StringComparer.Ordinal);
+            foreach (string name in members.Value)
+            {
+                if (!pooled.Contains(name))
+                {
+                    violations.Add(Violation(name, "orphan-member", $"member container {name} is labelled meridian-lab-member but the pool does not list it", window));
                 }
             }
         }

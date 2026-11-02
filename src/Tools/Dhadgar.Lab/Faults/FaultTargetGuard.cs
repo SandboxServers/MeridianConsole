@@ -24,6 +24,8 @@ public sealed class FaultTargetGuard(ILabTargetRegistry registry, IDockerInspect
     private const string ToxiproxyTargetId = "c:toxiproxy";
     private const string LabLabel = "meridian-lab";
     private const string LabNamePrefix = "/meridian-lab-";
+    private const string LabMemberLabel = "meridian-lab-member";
+    private const string LabMemberNamePrefix = "meridian-lab-m-";
 
     private static readonly HashSet<string> KnownFaultKinds = new(StringComparer.Ordinal)
     {
@@ -37,7 +39,7 @@ public sealed class FaultTargetGuard(ILabTargetRegistry registry, IDockerInspect
             [LabTargetKind.Proxy] = new HashSet<string>(StringComparer.Ordinal) { "toxic", "proxy_disable", "partition", "reset" },
             [LabTargetKind.Database] = new HashSet<string>(StringComparer.Ordinal) { "db" },
             [LabTargetKind.File] = new HashSet<string>(StringComparer.Ordinal), // no fault kind targets a file id; corrupt_file goes through c:nodes (review N8)
-            [LabTargetKind.Member] = new HashSet<string>(StringComparer.Ordinal),
+            [LabTargetKind.Member] = new HashSet<string>(StringComparer.Ordinal) { "kill", "pause", "disk_fill", "corrupt_file", "corrupt_registry", "reset" },
         };
 
     /// <summary>
@@ -71,6 +73,11 @@ public sealed class FaultTargetGuard(ILabTargetRegistry registry, IDockerInspect
         if (!AllowedKinds.TryGetValue(target.Kind, out var allowed) || !allowed.Contains(faultKind))
         {
             return Result<ResolvedTarget>.Failure("[Lab.BlastRadius] fault kind is not allowed on this target");
+        }
+
+        if (target.Kind == LabTargetKind.Member)
+        {
+            return await ResolveMemberAsync(target, ct).ConfigureAwait(false);
         }
 
         if (target.Kind == LabTargetKind.Database)
@@ -143,6 +150,78 @@ public sealed class FaultTargetGuard(ILabTargetRegistry registry, IDockerInspect
     /// <param name="kind">The target kind.</param>
     public static IReadOnlySet<string> AllowedFor(LabTargetKind kind) =>
         AllowedKinds.TryGetValue(kind, out IReadOnlySet<string>? allowed) ? allowed : new HashSet<string>(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Resolves a pool member (<c>m:&lt;member id&gt;</c>). A member's container is recreated on reset, so the stored container
+    /// id goes stale; the live container is found by its exact lab name and must carry both the lab label and the member label.
+    /// </summary>
+    private async Task<Result<ResolvedTarget>> ResolveMemberAsync(LabTarget target, CancellationToken ct)
+    {
+        string memberId = target.Name;
+        if (!IsSafeMemberId(memberId))
+        {
+            return Result<ResolvedTarget>.Failure("[Lab.BlastRadius] member id is not a lab member id");
+        }
+
+        string containerName = LabMemberNamePrefix + memberId;
+        var inspected = await inspector.InspectAsync(containerName, ct).ConfigureAwait(false);
+        if (inspected.IsFailure)
+        {
+            return Result<ResolvedTarget>.Failure(inspected.Error);
+        }
+
+        var inspection = inspected.Value;
+        if (!string.Equals(inspection.Name, "/" + containerName, StringComparison.Ordinal))
+        {
+            return Result<ResolvedTarget>.Failure("[Lab.BlastRadius] container name is not the member's lab name");
+        }
+
+        if (!inspection.Labels.TryGetValue(LabLabel, out var label) || !string.Equals(label, "1", StringComparison.Ordinal))
+        {
+            return Result<ResolvedTarget>.Failure("[Lab.BlastRadius] container is not labelled as lab-owned");
+        }
+
+        if (!inspection.Labels.TryGetValue(LabMemberLabel, out var owner) || !string.Equals(owner, memberId, StringComparison.Ordinal))
+        {
+            return Result<ResolvedTarget>.Failure("[Lab.BlastRadius] container is not labelled as this lab member");
+        }
+
+        if (!string.Equals(inspection.Context, inspector.LabContext, StringComparison.Ordinal))
+        {
+            return Result<ResolvedTarget>.Failure("[Lab.BlastRadius] container is not in the lab context");
+        }
+
+        var tripped = tripwire.Check(inspection.Name, inspection.Mounts);
+        if (tripped.IsFailure)
+        {
+            return Result<ResolvedTarget>.Failure(tripped.Error);
+        }
+
+        return Result<ResolvedTarget>.Success(new ResolvedTarget(target.TargetId, "member", memberId, inspection.Id, null));
+    }
+
+    /// <summary>
+    /// A member id is 1 to 32 lower-case letters, digits or hyphens (<c>lin-01</c>, <c>win-01</c>). Anything else is refused
+    /// before a name is built from it.
+    /// </summary>
+    private static bool IsSafeMemberId(string memberId)
+    {
+        if (memberId.Length is < 1 or > 32)
+        {
+            return false;
+        }
+
+        foreach (char c in memberId)
+        {
+            bool ok = c is (>= 'a' and <= 'z') or (>= '0' and <= '9') or '-';
+            if (!ok)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     private static bool IdMatches(string stored, string live) =>
         string.Equals(stored, live, StringComparison.Ordinal)
