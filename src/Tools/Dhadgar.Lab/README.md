@@ -223,10 +223,10 @@ A Leased call's lease is watched for the whole call. If the lease expires, is re
 
 ## Pool
 
-- **Model.** A pool member is a machine the lab can lease: a Linux container, the host (`m:host`), or a later tier. `pool_list` shows the providers and members. `pool_acquire` takes constraints (`os`, `min_os_build`, `sku`, `isolation`, `kind`, `arch`, `count`) and a `lease_id`. It picks the first provider whose dimensions match and whose per-OS limit has room, else `[Lab.PoolExhausted]`.
+- **Model.** A pool member is a machine the lab can lease: a Linux container, the host (`m:host`), or a later tier. `pool_list` shows the providers and members. `pool_acquire` takes constraints (`os`, `min_os_build`, `sku`, `isolation`, `kind`, `arch`, `reboot`, `count`) and a `purpose`; the lease is the caller's lease. It picks the first provider whose dimensions match and whose per-OS limit has room, else `[Lab.PoolExhausted]`.
 - **Members.** A member is registered as `m:<member id>` before its container starts. Its container is named `meridian-lab-m-<id>` and carries `meridian-lab=1` and `meridian-lab-member=<id>`, with `--restart no` and `--memory 1g`, on `meridian-lab-net`. There are no bind mounts and no published ports. `member_reset` and `pool_release` take `m:<id>` or the bare id.
 - **Host.** `m:host` is read-only. `member_reset m:host` and its destroy return `[Lab.BlastRadius] host is read-only`.
-- **Cleanup.** Lease end destroys every member of that lease. At start, the pool destroys each member listed in `LabPaths.State\pool.json` and clears the file. The file is written atomically. I5 reports a `meridian-lab-member` container that the pool does not list as an orphan.
+- **Cleanup.** Lease end destroys every container member (one lease holds the pool at a time). At start, the pool destroys each member listed in `LabPaths.State\pool.json` and clears the file. The file is written atomically. I5 reports a `meridian-lab-member` container that the pool does not list as an orphan.
 - **Image.** `lab_build` builds `meridian-lab/linux-member:<build id>` from `tools/lab/images/linux-member.Dockerfile` when it builds the `probe` project. The member runs `sleep infinity`; the probe is in `/opt/lab/probe`.
 - **Not in L30.** Windows members (L31) and VMs (D-ML31). Those providers return `[Lab.Unavailable]`.
 
