@@ -59,14 +59,118 @@ public sealed class ModelHunterTests : IDisposable
     }
 
     [Fact]
-    public async Task Hunter_SameSeed_SameFirstOpList()
+    public async Task Hunter_SameSeed_SameOpsAndOriginal()
     {
-        ModelHunter hunter = NewHunter(new FakeLab { ReusedTokenReturns201 = true });
-        Result<JobOutcome> one = await hunter.RunAsync(Seed, 200, 30, null, "build-1", CancellationToken.None);
-        Result<JobOutcome> two = await hunter.RunAsync(Seed, 200, 30, null, "build-1", CancellationToken.None);
+        // L27e: each run gets its own fake, so the second run does not see the first run's tokens.
+        var oneLab = new FakeLab { ReusedTokenReturns201 = true };
+        var twoLab = new FakeLab { ReusedTokenReturns201 = true };
+        Result<JobOutcome> one = await NewHunter(oneLab).RunAsync(Seed, 200, 30, null, "build-1", CancellationToken.None);
+        Result<JobOutcome> two = await NewHunter(twoLab).RunAsync(Seed, 200, 30, null, "build-1", CancellationToken.None);
 
-        Assert.Equal(one.Value!.Result!["ops"]!.ToJsonString(), two.Value!.Result!["ops"]!.ToJsonString());
+        JsonObject first = one.Value!.Result!.AsObject();
+        JsonObject second = two.Value!.Result!.AsObject();
+        Assert.Equal(first["ops"]!.ToJsonString(), second["ops"]!.ToJsonString());
+        Assert.Equal(first["original_ops"]!.ToJsonString(), second["original_ops"]!.ToJsonString());
+        Assert.Equal(first["cscheck_seed"]!.ToJsonString(), second["cscheck_seed"]!.ToJsonString());
+        Assert.Equal(first["cases_run"]!.ToJsonString(), second["cases_run"]!.ToJsonString());
     }
+
+    [Fact]
+    public async Task Hunter_SameSeed_SameCallSequence()
+    {
+        var one = new FakeLab();
+        var two = new FakeLab();
+        Result<JobOutcome> outcomeOne = await NewHunter(one).RunAsync(Seed, 20, 30, null, "build-1", CancellationToken.None);
+        Result<JobOutcome> outcomeTwo = await NewHunter(two).RunAsync(Seed, 20, 30, null, "build-1", CancellationToken.None);
+
+        Assert.True(outcomeOne.IsSuccess, outcomeOne.Error);
+        Assert.True(outcomeTwo.IsSuccess, outcomeTwo.Error);
+        Assert.Equal(CallSequence(one), CallSequence(two));
+    }
+
+    [Fact]
+    public async Task Hunter_DifferentSeed_DifferentCallSequence()
+    {
+        var one = new FakeLab();
+        var two = new FakeLab();
+        await NewHunter(one).RunAsync(Seed, 20, 30, null, "build-1", CancellationToken.None);
+        await NewHunter(two).RunAsync(Seed + 1, 20, 30, null, "build-1", CancellationToken.None);
+
+        Assert.NotEqual(CallSequence(one), CallSequence(two));
+    }
+
+    [Fact]
+    public async Task Hunter_Iterations_CasesRunEqualsIterations()
+    {
+        Result<JobOutcome> outcome = await NewHunter(new FakeLab()).RunAsync(Seed, 20, 30, null, "build-1", CancellationToken.None);
+
+        Assert.True(outcome.IsSuccess, outcome.Error);
+        Assert.Equal("pass", outcome.Value!.Overall);
+        Assert.Equal(20, outcome.Value.Result!["cases_run"]!.GetValue<int>());
+        Assert.False(outcome.Value.Result["budget_hit"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    public async Task Hunter_BudgetSpent_StopsWithBudgetHit()
+    {
+        // Each invariants_check costs 2 s of the hunter's clock, so a 10 s budget ends the sample well before 500 cases.
+        var lab = new FakeLab { OnInvariantsCheck = () => _time.Advance(TimeSpan.FromSeconds(2)) };
+        Result<JobOutcome> outcome = await NewHunter(lab).RunAsync(Seed, 500, 10, null, "build-1", CancellationToken.None);
+
+        Assert.True(outcome.IsSuccess, outcome.Error);
+        int casesRun = outcome.Value!.Result!["cases_run"]!.GetValue<int>();
+        Assert.InRange(casesRun, 1, 499);
+        Assert.True(outcome.Value.Result["budget_hit"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    public async Task Hunter_SeedAboveLongMax_IsDeterministic()
+    {
+        const ulong largeSeed = 12499590173714643239UL;
+        var one = new FakeLab();
+        var two = new FakeLab();
+        await NewHunter(one).RunAsync(largeSeed, 10, 30, null, "build-1", CancellationToken.None);
+        await NewHunter(two).RunAsync(largeSeed, 10, 30, null, "build-1", CancellationToken.None);
+
+        Assert.Equal(CallSequence(one), CallSequence(two));
+    }
+
+    [Fact]
+    public async Task Hunter_AlwaysDiverging_ShrinksToOneOp()
+    {
+        // Every case diverges, so most one-op removals diverge too and the shrink ends at one op. Each successful removal costs
+        // one candidate, so the shrink runs at least original - 1 candidates; a removal that does not diverge costs more.
+        Result<JobOutcome> outcome = await NewHunter(new FakeLab { I1Violations = true })
+            .RunAsync(Seed, 50, 30, null, "build-1", CancellationToken.None);
+
+        Assert.True(outcome.IsSuccess, outcome.Error);
+        Assert.Equal("fail", outcome.Value!.Overall);
+        JsonObject node = outcome.Value.Result!.AsObject();
+        int originalCount = node["original_ops"]!.AsArray().Count;
+        Assert.Single(node["ops"]!.AsArray());
+        Assert.True(node["shrink_cases"]!.GetValue<int>() >= originalCount - 1, "each removal costs one candidate");
+        Assert.False(node["budget_hit"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    public async Task Hunter_BudgetSpentInShrink_KeepsSmallestSoFar()
+    {
+        var lab = new FakeLab { I1Violations = true, OnInvariantsCheck = () => _time.Advance(TimeSpan.FromSeconds(1)) };
+        Result<JobOutcome> outcome = await NewHunter(lab).RunAsync(Seed, 50, 4, null, "build-1", CancellationToken.None);
+
+        Assert.True(outcome.IsSuccess, outcome.Error);
+        Assert.Equal("fail", outcome.Value!.Overall);
+        JsonObject node = outcome.Value.Result!.AsObject();
+        Assert.True(node["budget_hit"]!.GetValue<bool>());
+        int shrunk = node["ops"]!.AsArray().Count;
+        Assert.InRange(shrunk, 1, node["original_ops"]!.AsArray().Count);
+    }
+
+    /// <summary>The tool calls a hunt made, with the token_ref of each probe, so two runs can be compared call by call.</summary>
+    private static List<string> CallSequence(FakeLab lab) =>
+        lab.Arguments.Select(call => call.Args.TryGetProperty("token_ref", out JsonElement token)
+            ? call.Tool + " " + token.GetString()
+            : call.Tool).ToList();
 
     [Fact]
     public async Task Hunter_PgDownEnroll500_IsKnownNotNew()
@@ -572,7 +676,7 @@ public sealed class ModelHunterTests : IDisposable
         /// <summary>
         /// When true, the third after-op <c>invariants_check</c> of a case returns one I1, so a case with three checked ops diverges.
         /// That case arms one flake: the first after-op check of the case that runs next returns one I1, once. A shrink therefore
-        /// fails on that next case and replays clean, while the original replays dirty. Shrink length is bounded by time, so
+        /// fails on that next case and replays clean, while the original replays dirty. Shrink length is bounded by <c>MaxShrinkCases</c> and time, so
         /// the rule counts checks within a case, not cases.
         /// </summary>
         public bool I1FromThirdOp { get; init; }
@@ -581,6 +685,9 @@ public sealed class ModelHunterTests : IDisposable
         public int Throttles { get; set; }
 
         public Action? OnFirstPgDown { get; set; }
+
+        /// <summary>Runs on each <c>invariants_check</c>, before it answers; a test advances the hunter's clock here (L27e).</summary>
+        public Action? OnInvariantsCheck { get; set; }
 
         public List<(string Tool, bool Cancelled)> Calls { get; } = [];
 
@@ -687,6 +794,7 @@ public sealed class ModelHunterTests : IDisposable
                     int n = sql.Contains("enrollment_tokens", StringComparison.Ordinal) ? _used.Count(used => used) : _nodes;
                     return Ok(new { rows = new[] { new { n } } });
                 case "invariants_check":
+                    OnInvariantsCheck?.Invoke();
                     // Queued I1s are returned once and then cleared; the rule and FlakyI1OnCheck add their own.
                     _checks++;
                     _caseChecks++;

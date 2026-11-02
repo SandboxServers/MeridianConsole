@@ -6,6 +6,7 @@ using CsCheck;
 using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.Jobs;
 using Dhadgar.Lab.Policy;
+using Dhadgar.Lab.Random;
 using Dhadgar.Lab.Tools;
 using Dhadgar.Shared.Results;
 using Microsoft.Extensions.Logging;
@@ -16,7 +17,7 @@ namespace Dhadgar.Lab.Hunt;
 /// <summary>
 /// The enrollment model hunter (<c>hunt_model_run</c>, packet L27 items 4 and 5). A CsCheck generator draws 1 to 15 model ops
 /// from the run seed; each iteration resets the nodes data, runs the ops through the lab tools with the job's lease, and checks
-/// the product against <see cref="EnrollmentModel"/>. A divergence is shrunk by CsCheck and written to <c>repro\repro.toml</c>
+/// the product against <see cref="EnrollmentModel"/>. A divergence is shrunk by removing one op at a time and written to <c>repro\repro.toml</c>
 /// with a row <c>hunt/enrollment</c> FAIL. Every op goes through the <c>invoke</c> delegate (the dispatcher in the daemon, a
 /// fake in tests), so the hunter never calls the Nodes adapter directly (R-CONTRACT).
 /// </summary>
@@ -36,6 +37,12 @@ public sealed class ModelHunter
 
     /// <summary>The heal budget of the <c>finally</c> that runs <c>fault_reset</c> (A3).</summary>
     public static readonly TimeSpan HealBudget = TimeSpan.FromSeconds(30);
+
+    /// <summary>The most candidates one shrink runs (L27e). A safety net: greedy removal over 15 ops runs at most 119.</summary>
+    private const int MaxShrinkCases = 200;
+
+    /// <summary>The <see cref="LabRandom"/> stream the sample draws its case seeds from (L27e).</summary>
+    private const string SeedStream = "hunt:enrollment";
 
     /// <summary>The wait after <c>PgDown</c> before the next op (A2: no readiness check for Postgres, F67).</summary>
     public static readonly TimeSpan DefaultSettle = TimeSpan.FromSeconds(2);
@@ -98,11 +105,11 @@ public sealed class ModelHunter
     }
 
     /// <summary>
-    /// Runs the hunt: CsCheck draws up to <paramref name="iterations"/> op lists from the seed of <paramref name="runSeed"/>
-    /// for at most <paramref name="budgetSeconds"/>. A divergence is shrunk, replayed once to report its first diverging op, and
-    /// written to <paramref name="jobFolder"/> when one is given.
+    /// Runs the hunt: draws up to <paramref name="iterations"/> cases, each from a seed of <c>LabRandom(runSeed, "hunt:enrollment")</c>,
+    /// for at most <paramref name="budgetSeconds"/> on the hunter's clock. A divergence is shrunk by removing one op at a time,
+    /// replayed once to report its first diverging op, and written to <paramref name="jobFolder"/> when one is given.
     /// </summary>
-    /// <param name="runSeed">The run seed; the CsCheck seed string derives from it (R-SEED).</param>
+    /// <param name="runSeed">The run seed; each case's seed derives from it (R-SEED).</param>
     /// <param name="iterations">The number of iterations (at least 1).</param>
     /// <param name="budgetSeconds">The time budget of the sample, in seconds (at least 1).</param>
     /// <param name="jobFolder">The job folder for <c>repro\repro.toml</c> and the row, or null to write nothing.</param>
@@ -116,8 +123,7 @@ public sealed class ModelHunter
             return Result<JobOutcome>.Failure("[Lab.InvalidArgument] iterations and budget_s must be at least 1");
         }
 
-        string cscheckSeed = new PCG(0u, runSeed).ToString();
-        SampleFindings findings = await Task.Run(() => Sample(cscheckSeed, iterations, budgetSeconds, ct), ct).ConfigureAwait(false);
+        SampleFindings findings = await SampleAsync(runSeed, iterations, budgetSeconds, ct).ConfigureAwait(false);
         ct.ThrowIfCancellationRequested();
         if (findings.Infrastructure is not null)
         {
@@ -129,7 +135,8 @@ public sealed class ModelHunter
             var passed = new JsonObject
             {
                 ["state"] = "passed", ["iterations"] = iterations, ["throttled"] = findings.Throttled, ["known"] = findings.Known,
-                ["carried"] = findings.Carried,
+                ["carried"] = findings.Carried, ["cases_run"] = findings.CasesRun, ["shrink_cases"] = findings.ShrinkCases,
+                ["budget_hit"] = findings.BudgetHit,
             };
             return Result<JobOutcome>.Success(new JobOutcome("pass", passed));
         }
@@ -162,12 +169,13 @@ public sealed class ModelHunter
         }
 
         string detail = verdict.Detail ?? "the shrunk case did not diverge on replay";
+        string caseSeed = findings.CaseSeed ?? string.Empty;
         var failed = new JsonObject
         {
             ["state"] = verdict.Diverged ? "diverged" : "not_reproduced",
             ["model"] = ModelName,
             ["run_seed"] = runSeed,
-            ["cscheck_seed"] = cscheckSeed,
+            ["cscheck_seed"] = caseSeed,
             ["ops"] = OpArray(reported),
             ["first_diverging_op"] = verdict.Index,
             ["detail"] = detail,
@@ -175,6 +183,9 @@ public sealed class ModelHunter
             ["carried"] = findings.Carried,
             ["original_ops"] = OpArray(findings.Original ?? findings.Shrunk),
             ["original_detail"] = findings.OriginalDetail,
+            ["cases_run"] = findings.CasesRun,
+            ["shrink_cases"] = findings.ShrinkCases,
+            ["budget_hit"] = findings.BudgetHit,
         };
         if (shrinkUnstable)
         {
@@ -183,7 +194,7 @@ public sealed class ModelHunter
 
         if (jobFolder is not null)
         {
-            Result written = await WriteReproAsync(jobFolder, runSeed, cscheckSeed, buildId, reported, verdict.Index, detail, ct)
+            Result written = await WriteReproAsync(jobFolder, runSeed, caseSeed, buildId, reported, verdict.Index, detail, ct)
                 .ConfigureAwait(false);
             if (written.IsFailure)
             {
@@ -206,73 +217,113 @@ public sealed class ModelHunter
         return result.Infrastructure is not null ? Result<CaseResult>.Failure(result.Infrastructure) : Result<CaseResult>.Success(result);
     }
 
-    /// <summary>The findings of one CsCheck sample.</summary>
+    /// <summary>The findings of one hunt sample.</summary>
     /// <param name="Original">The ops of the first diverging case, before the shrink, or null.</param>
     /// <param name="OriginalDetail">What the first diverging case reported, or null.</param>
-    /// <param name="Carried">The violations the case-start checkpoints carried, summed over the sample.</param>
+    /// <param name="Carried">The violations the case-start checkpoints carried, summed over the sample and its shrink.</param>
+    /// <param name="CaseSeed">The PCG seed string of the first diverging case, or null when nothing diverged.</param>
+    /// <param name="CasesRun">The cases drawn from the stream, not counting the shrink.</param>
+    /// <param name="ShrinkCases">The candidates the shrink ran.</param>
+    /// <param name="BudgetHit">True when the time budget or the shrink cap ended the sample before its iterations or shrink finished.</param>
     private sealed record SampleFindings(List<HuntOp>? Shrunk, int Throttled, int Known, string? Infrastructure, List<HuntOp>? Original,
-        string? OriginalDetail, int Carried);
+        string? OriginalDetail, int Carried, string? CaseSeed, int CasesRun, int ShrinkCases, bool BudgetHit);
+
+    /// <summary>The findings of one shrink, with its counts folded into the sample's.</summary>
+    private sealed record ShrinkFindings(List<HuntOp> Ops, int Cases, bool BudgetHit, string? Infrastructure, int Throttled, int Known,
+        int Carried);
 
     /// <summary>
-    /// The CsCheck sample. CsCheck calls the assertion synchronously, so each case blocks on its async tool calls; the caller
-    /// runs this on a worker thread. Infrastructure errors are kept and end the sample without a shrink.
+    /// Draws up to <paramref name="iterations"/> cases, one per <c>PCG</c> seed drawn from <c>LabRandom(runSeed, "hunt:enrollment")</c>,
+    /// until one diverges or the budget on the hunter's clock is spent. Infrastructure errors are kept and end the sample without a shrink.
     /// </summary>
-    private SampleFindings Sample(string cscheckSeed, int iterations, int budgetSeconds, CancellationToken ct)
+    private async Task<SampleFindings> SampleAsync(ulong runSeed, int iterations, int budgetSeconds, CancellationToken ct)
     {
-        List<HuntOp>? captured = null;
-        List<HuntOp>? original = null;
-        string? originalDetail = null;
+        var rng = new LabRandom(runSeed, SeedStream);
+        DateTimeOffset deadline = _time.GetUtcNow().AddSeconds(budgetSeconds);
         int throttled = 0;
         int known = 0;
         int carried = 0;
-        string? infrastructure = null;
-        try
+        int casesRun = 0;
+        for (int i = 0; i < iterations; i++)
         {
-            Check.Sample(OpGen.List[1, 15],
-                ops =>
-                {
-                    if (infrastructure is not null)
-                    {
-                        return;
-                    }
+            if (_time.GetUtcNow() >= deadline)
+            {
+                return new SampleFindings(null, throttled, known, null, null, null, carried, null, casesRun, 0, true);
+            }
 
-                    CaseResult result = RunCaseAsync(ops, ct).GetAwaiter().GetResult();
-                    if (result.Infrastructure is not null)
-                    {
-                        infrastructure = result.Infrastructure;
-                        return;
-                    }
+            var pcg = new PCG(0u, rng.NextUInt64());
+            string caseSeed = pcg.ToString();
+            List<HuntOp> ops = OpGen.List[1, 15].Generate(pcg, null, out _);
+            CaseResult result = await RunCaseAsync(ops, ct).ConfigureAwait(false);
+            casesRun++;
+            if (result.Infrastructure is not null)
+            {
+                return new SampleFindings(null, throttled, known, result.Infrastructure, null, null, carried, null, casesRun, 0, false);
+            }
 
-                    throttled += result.Throttled ? 1 : 0;
-                    known += result.Known;
-                    carried += result.Carried;
-                    if (result.Diverged)
-                    {
-                        // CsCheck shrinks by calling this again; only the first failure is the original.
-                        original ??= [.. ops];
-                        originalDetail ??= result.Detail;
-                        throw new InvalidOperationException(result.Detail ?? "diverged");
-                    }
-                },
-                _ => { },
-                cscheckSeed,
-                iterations,
-                budgetSeconds,
-                1,
-                ops =>
-                {
-                    // CsCheck prints the shrunk failing input last; keep it.
-                    captured = [.. ops];
-                    return string.Join(", ", ops.Select(op => op.ToString()));
-                },
-                null);
-        }
-        catch (CsCheckException)
-        {
-            return new SampleFindings(captured, throttled, known, infrastructure, original, originalDetail, carried);
+            throttled += result.Throttled ? 1 : 0;
+            known += result.Known;
+            carried += result.Carried;
+            if (result.Diverged)
+            {
+                ShrinkFindings shrink = await ShrinkAsync(ops, deadline, ct).ConfigureAwait(false);
+                throttled += shrink.Throttled;
+                known += shrink.Known;
+                carried += shrink.Carried;
+                return new SampleFindings(shrink.Infrastructure is null ? shrink.Ops : null, throttled, known, shrink.Infrastructure,
+                    ops, result.Detail, carried, caseSeed, casesRun, shrink.Cases, shrink.BudgetHit);
+            }
         }
 
-        return new SampleFindings(null, throttled, known, infrastructure, original, originalDetail, carried);
+        return new SampleFindings(null, throttled, known, null, null, null, carried, null, casesRun, 0, false);
+    }
+
+    /// <summary>
+    /// Greedy one-op removal: a candidate that still diverges replaces the list, and the scan restarts from the first op. The
+    /// shrink stops at <see cref="MaxShrinkCases"/> candidates or the deadline, keeping the smallest list that still diverges.
+    /// </summary>
+    /// <param name="failing">The diverging ops.</param>
+    /// <param name="deadline">The sample's deadline on the hunter's clock.</param>
+    /// <param name="ct">The cancellation token.</param>
+    private async Task<ShrinkFindings> ShrinkAsync(List<HuntOp> failing, DateTimeOffset deadline, CancellationToken ct)
+    {
+        List<HuntOp> current = failing;
+        int cases = 0;
+        int throttled = 0;
+        int known = 0;
+        int carried = 0;
+        bool progress = true;
+        while (progress && current.Count > 1)
+        {
+            progress = false;
+            for (int j = 0; j < current.Count; j++)
+            {
+                if (cases >= MaxShrinkCases || _time.GetUtcNow() >= deadline)
+                {
+                    return new ShrinkFindings(current, cases, true, null, throttled, known, carried);
+                }
+
+                List<HuntOp> candidate = [.. current.Take(j), .. current.Skip(j + 1)];
+                CaseResult result = await RunCaseAsync(candidate, ct).ConfigureAwait(false);
+                cases++;
+                if (result.Infrastructure is not null)
+                {
+                    return new ShrinkFindings(current, cases, false, result.Infrastructure, throttled, known, carried);
+                }
+
+                throttled += result.Throttled ? 1 : 0;
+                known += result.Known;
+                carried += result.Carried;
+                if (result.Diverged)
+                {
+                    current = candidate;
+                    progress = true;
+                    break;
+                }
+            }
+        }
+
+        return new ShrinkFindings(current, cases, false, null, throttled, known, carried);
     }
 
     /// <summary>The result of one case.</summary>
