@@ -1,3 +1,4 @@
+using System.Text;
 using Dhadgar.Shared.Results;
 
 namespace Dhadgar.Lab.Services;
@@ -18,7 +19,23 @@ public sealed record LabServiceContext(
     string CaStateDirectory,
     string RabbitMqUsername,
     string RabbitMqPassword,
-    string? AdminApiKey = null);
+    string? AdminApiKey = null)
+{
+    /// <summary>
+    /// Prints the build, the connection-string keys (never their values) and the non-secret fields. Both passwords
+    /// print as <c>[redacted]</c>, so <c>ToString()</c> and a failed assert never show them.
+    /// </summary>
+    private bool PrintMembers(StringBuilder builder)
+    {
+        builder.Append("BuildId = ").Append(BuildId)
+            .Append(", ConnectionStrings = [").Append(string.Join(", ", ConnectionStrings.Keys)).Append(']')
+            .Append(", CaStateDirectory = ").Append(CaStateDirectory)
+            .Append(", RabbitMqUsername = ").Append(RabbitMqUsername)
+            .Append(", RabbitMqPassword = [redacted]")
+            .Append(", AdminApiKey = [redacted]");
+        return true;
+    }
+}
 
 /// <summary>
 /// One lab-managed service: its container identity, port and the environment it needs behind the proxies (L09).
@@ -42,6 +59,9 @@ public interface ILabServiceAdapter
 
     /// <summary>Path polled on the loopback host port until it answers 200.</summary>
     string HealthPath { get; }
+
+    /// <summary>Status that means the process is up and answering. Most services answer 200; a service may name another.</summary>
+    System.Net.HttpStatusCode ReadyStatusCode => System.Net.HttpStatusCode.OK;
 
     /// <summary>Config keys the overlay may set for this service (C4 allowlist).</summary>
     IReadOnlySet<string> OverlayKeys { get; }

@@ -448,7 +448,7 @@ public sealed class LabServices
                 using var request = new HttpRequestMessage(HttpMethod.Get, uri);
                 request.Headers.Host = ProbeHostHeader;
                 using HttpResponseMessage response = await http.SendAsync(request, ct).ConfigureAwait(false);
-                if (response.StatusCode == HttpStatusCode.OK)
+                if (response.StatusCode == adapter.ReadyStatusCode)
                 {
                     return Result.Success();
                 }

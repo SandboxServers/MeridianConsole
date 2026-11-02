@@ -4,7 +4,7 @@ using Dhadgar.Shared.Results;
 namespace Dhadgar.Lab.Services;
 
 /// <summary>
-/// Discord behind the lab proxies (C1 port 15120, L36). The bot stays absent (D-ML41), so <c>/readyz</c> answers 503 and
+/// Discord behind the lab proxies (C1 port 15120, L36). The bot stays absent (D-ML41), so <c>/healthz</c> answers 503 and
 /// that is the asserted state (F26). Postgres, RabbitMQ and the webhook sink are reached only through Toxiproxy. The
 /// <c>SecretsService__Url</c> key is left unset so the <c>:5080</c> fallback stays visible (KI-DISCORD-SECRETS-PORT).
 /// </summary>
@@ -33,6 +33,9 @@ public sealed class DiscordLabAdapter : ILabServiceAdapter
 
     /// <inheritdoc />
     public string HealthPath => "/healthz";
+
+    /// <summary>The bot absent (D-ML41, F26): the 503 body is the asserted state, so 503 counts as ready.</summary>
+    public System.Net.HttpStatusCode ReadyStatusCode => System.Net.HttpStatusCode.ServiceUnavailable;
 
     /// <inheritdoc />
     public IReadOnlySet<string> OverlayKeys { get; } = new HashSet<string>(StringComparer.Ordinal)

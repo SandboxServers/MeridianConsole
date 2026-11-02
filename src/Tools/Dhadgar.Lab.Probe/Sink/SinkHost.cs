@@ -50,9 +50,20 @@ public static class SinkHost
             string path = ctx.Request.Path.Value ?? "/";
             var headers = ctx.Request.Headers.Select(h => new KeyValuePair<string, string>(
                 h.Key, string.Join(",", h.Value.ToArray())));
+            // Read at most MaxBodyChars characters: a larger body is never buffered, and the recorder stores the cut.
             using var reader = new StreamReader(ctx.Request.Body);
-            string body = await reader.ReadToEndAsync(ctx.RequestAborted).ConfigureAwait(false);
-            recorder.Record(path, headers, body);
+            char[] buffer = new char[SinkRecorder.MaxBodyChars];
+            try
+            {
+                int read = await reader.ReadBlockAsync(buffer.AsMemory(), ctx.RequestAborted).ConfigureAwait(false);
+                string body = new string(buffer, 0, read);
+                recorder.Record(path, headers, body);
+            }
+            finally
+            {
+                Array.Clear(buffer);
+            }
+
             return Results.Ok();
         });
 

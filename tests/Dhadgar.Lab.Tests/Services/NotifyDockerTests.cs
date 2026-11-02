@@ -17,8 +17,9 @@ namespace Dhadgar.Lab.Tests.Services;
 
 /// <summary>
 /// Builds Notifications and Discord from the working tree, starts the lab stack and both services, and checks the
-/// asserted states: Notifications answers <c>/healthz</c>, and Discord answers <c>/readyz</c> 503 while its bot is absent
+/// asserted states: Notifications answers <c>/healthz</c>, and Discord answers <c>/healthz</c> 503 while its bot is absent
 /// (D-ML41, F26). Runs only where the Linux Docker engine is available. Touches only <c>meridian-lab-*</c> resources.
+/// The webhook-to-sink step is not exercised: the lab has no sink start path yet (recorded gap).
 /// </summary>
 [Collection(LabDockerGate.Name)]
 public sealed class NotifyDockerTests
@@ -100,10 +101,12 @@ public sealed class NotifyDockerTests
                 Assert.Equal(HttpStatusCode.OK, health.StatusCode);
             }
 
-            // Discord has no bot in the lab (D-ML41): readiness is the asserted 503.
-            using (HttpResponseMessage ready = await http.GetAsync($"http://127.0.0.1:{LabPorts.Discord}/readyz", ct))
+            // Discord has no bot in the lab (D-ML41): /healthz is the asserted 503 (Discord maps no /readyz).
+            using (HttpResponseMessage ready = await http.GetAsync($"http://127.0.0.1:{LabPorts.Discord}/healthz", ct))
             {
                 Assert.Equal(HttpStatusCode.ServiceUnavailable, ready.StatusCode);
+                string body = await ready.Content.ReadAsStringAsync(ct);
+                Assert.Contains("botStatus", body, StringComparison.Ordinal);
             }
         }
         finally

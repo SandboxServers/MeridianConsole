@@ -53,8 +53,8 @@ Dev and lab only, never production. `meridian-lab` is a local tool that drives t
 ## Services
 
 - **Notifications** (`meridian-lab-notifications`, 15090): built from `src/Dhadgar.Notifications`. Postgres, RabbitMQ and its webhook go through the `notifications-postgres` (20050), `notifications-rabbitmq` (20051) and `notifications-webhook` (20052) proxies. Its admin key comes from the vault. Its EF outbox is checked by I2 and reports `KI-NOTIF-OUTBOX` while the tables are missing. Email is not switched to SMTP (D-ML40 not ruled), so email rows assert the designed failure.
-- **Discord** (`meridian-lab-discord`, 15120): built from `src/Dhadgar.Discord`. Postgres and RabbitMQ go through `discord-postgres` (20060) and `discord-rabbitmq` (20062). The webhook goes through `discord-webhook` (20061). The bot stays absent (D-ML41), so `/readyz` 503 is the asserted state (F26). `SecretsService__Url` is unset, so the `:5080` fallback is visible (KI-DISCORD-SECRETS-PORT).
-- **Sink** (`meridian-lab-sink`, 18090): the probe image in `tools/lab/images/probe.Dockerfile` running `Dhadgar.Lab.Probe sink`. It records requests in memory (last 500), drops `Authorization`, redacts credentials, and serves `GET /_sink/requests?since=` and `DELETE /_sink/requests`.
+- **Discord** (`meridian-lab-discord`, 15120): built from `src/Dhadgar.Discord`. Postgres and RabbitMQ go through `discord-postgres` (20060) and `discord-rabbitmq` (20062). The webhook goes through `discord-webhook` (20061). The bot stays absent (D-ML41), so `/healthz` 503 is the asserted state (F26). `SecretsService__Url` is unset, so the `:5080` fallback is visible (KI-DISCORD-SECRETS-PORT).
+- **Sink** (`meridian-lab-sink`, 18090): not started by the lab yet (no sink start path); the probe mode and image exist. The probe image in `tools/lab/images/probe.Dockerfile` runs `Dhadgar.Lab.Probe sink`. It records requests in memory (last 500), drops `Authorization`, redacts credentials, and serves `GET /_sink/requests?since=` and `DELETE /_sink/requests`.
 
 ## Daemon edge
 

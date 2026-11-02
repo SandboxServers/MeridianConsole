@@ -43,12 +43,34 @@ public sealed class SinkRecorder
         "Authorization",
     };
 
+    /// <summary>Header names that carry credentials by name, even when they are not in <see cref="RedactedHeaders"/>.</summary>
+    private static readonly Regex SensitiveHeaderName = new(
+        @"(?i)(key|token|secret|auth|passw|cookie|signature|credential|session)",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// Key/value credential pairs. A quoted value runs to its closing quote (escaped quotes included), so a spaced
+    /// password or a JSON string nested in a JSON string is redacted whole.
+    /// </summary>
     private static readonly Regex SecretPair = new(
-        @"(?i)((?:access_token|refresh_token|id_token|password|client_secret|secret|api[_-]?key|token)""?\s*[:=]\s*""?)[^""&,\s}]+",
+        @"(?i)(?<pre>(?:access_token|refresh_token|id_token|password|passwd|client_secret|secret|api[_-]?key|token|authorization|private_key)\\?""?\s*[:=]\s*)(?:(?<q>\\?"")(?:[^""\\]|\\.)*(?<qe>\\?"")|[^""&,\s}]+)",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly Regex BearerValue = new(
         @"(?i)(bearer\s+)[A-Za-z0-9._~+/=-]+",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex BasicValue = new(
+        @"(?i)(basic\s+)[A-Za-z0-9+/=]+",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex PemBlock = new(
+        @"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?(?:-----END [A-Z ]*PRIVATE KEY-----|\z)",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.Singleline);
+
+    /// <summary>The token segment of a Discord-style webhook path (<c>/api/webhooks/{id}/{token}</c>).</summary>
+    private static readonly Regex WebhookTokenPath = new(
+        @"(?i)(/api/webhooks/\d+/)[^/?#]+",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private readonly object _gate = new();
@@ -79,19 +101,17 @@ public sealed class SinkRecorder
                 continue;
             }
 
-            cleaned[header.Key] = RedactedHeaders.Contains(header.Key) ? "[redacted]" : Redact(header.Value);
+            bool secretName = RedactedHeaders.Contains(header.Key) || SensitiveHeaderName.IsMatch(header.Key);
+            cleaned[header.Key] = secretName ? "[redacted]" : Redact(header.Value);
         }
 
-        string kept = Redact(body);
-        if (kept.Length > MaxBodyChars)
-        {
-            kept = kept[..MaxBodyChars];
-        }
+        string kept = Bound(Redact(body));
+        string storedPath = Bound(Redact(WebhookTokenPath.Replace(path, "$1[redacted]")));
 
         lock (_gate)
         {
             _seq++;
-            var request = new SinkRequest(_seq, _time.GetUtcNow(), path, cleaned, kept);
+            var request = new SinkRequest(_seq, _time.GetUtcNow(), storedPath, cleaned, kept);
             _items.Enqueue(request);
             while (_items.Count > MaxRecords)
             {
@@ -120,11 +140,29 @@ public sealed class SinkRecorder
         }
     }
 
-    /// <summary>Replaces credential-shaped text (key=value, JSON pairs and bearer tokens) with <c>[redacted]</c>.</summary>
+    /// <summary>
+    /// Replaces credential-shaped text (key=value, JSON pairs, bearer and basic tokens, PEM private keys) with <c>[redacted]</c>.
+    /// A quoted value keeps its quotes: <c>"password":"[redacted]"</c>.
+    /// </summary>
     public static string Redact(string text)
     {
         ArgumentNullException.ThrowIfNull(text);
-        string withPairs = SecretPair.Replace(text, match => match.Groups[1].Value + "[redacted]");
+        string withPem = PemBlock.Replace(text, "[redacted]");
+        string withBasic = BasicValue.Replace(withPem, match => match.Groups[1].Value + "[redacted]");
+        string withPairs = SecretPair.Replace(withBasic, RedactPair);
         return BearerValue.Replace(withPairs, match => match.Groups[1].Value + "[redacted]");
     }
+
+    private static string RedactPair(Match match)
+    {
+        string prefix = match.Groups["pre"].Value;
+        if (match.Groups["q"].Success)
+        {
+            return prefix + match.Groups["q"].Value + "[redacted]" + match.Groups["qe"].Value;
+        }
+
+        return prefix + "[redacted]";
+    }
+
+    private static string Bound(string text) => text.Length > MaxBodyChars ? text[..MaxBodyChars] : text;
 }

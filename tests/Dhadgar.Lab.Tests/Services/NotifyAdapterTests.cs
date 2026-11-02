@@ -23,6 +23,25 @@ public sealed class NotifyAdapterTests
             withAdminKey ? "lab-admin-key-value" : null);
 
     [Fact]
+    public void ReadyStatus_DiscordCountsAs503_OthersAs200()
+    {
+        Assert.Equal(System.Net.HttpStatusCode.ServiceUnavailable, new DiscordLabAdapter().ReadyStatusCode);
+        ILabServiceAdapter notifications = new NotificationsLabAdapter();
+        Assert.Equal(System.Net.HttpStatusCode.OK, notifications.ReadyStatusCode);
+    }
+
+    [Fact]
+    public void Context_ToString_NeverPrintsSecretsOrConnectionStrings()
+    {
+        string text = Context().ToString();
+
+        Assert.DoesNotContain("lab-admin-key-value", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("lab-password-value", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Database=dhadgar_notifications", text, StringComparison.Ordinal);
+        Assert.Contains("AdminApiKey = [redacted]", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Notifications_RabbitMqAndWebhook_GoThroughProxies()
     {
         var env = new NotificationsLabAdapter().Environment(Context());

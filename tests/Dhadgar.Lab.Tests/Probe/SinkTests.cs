@@ -1,5 +1,12 @@
 using System.Collections.Generic;
+using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Text;
+using System.Text.Json;
+using System.Threading.Tasks;
 using Dhadgar.Lab.Probe;
+using Microsoft.AspNetCore.Builder;
 using Xunit;
 
 namespace Dhadgar.Lab.Tests.Probe;
@@ -26,7 +33,29 @@ public sealed class SinkTests
         Assert.False(stored.Headers.ContainsKey("Authorization"));
         Assert.Equal("[redacted]", stored.Headers["X-Admin-Api-Key"]);
         Assert.Equal("application/json", stored.Headers["Content-Type"]);
-        Assert.DoesNotContain("abc.def.ghi", stored.Headers.Values);
+        Assert.DoesNotContain(stored.Headers.Values, v => v.Contains("abc.def.ghi", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Sink_RedactsSecretNamedHeaders_AndKeepsPlainOnes()
+    {
+        var recorder = new SinkRecorder(TimeProvider.System);
+        var headers = new List<KeyValuePair<string, string>>
+        {
+            new("X-Api-Key", "k3y-123"),
+            new("X-Auth-Token", "eyJhbGciOi"),
+            new("X-Amz-Security-Token", "session-value"),
+            new("Content-Type", "application/json"),
+            new("User-Agent", "lab-probe/1.0"),
+        };
+
+        SinkRequest stored = recorder.Record("/webhook", headers, "{}");
+
+        Assert.Equal("[redacted]", stored.Headers["X-Api-Key"]);
+        Assert.Equal("[redacted]", stored.Headers["X-Auth-Token"]);
+        Assert.Equal("[redacted]", stored.Headers["X-Amz-Security-Token"]);
+        Assert.Equal("application/json", stored.Headers["Content-Type"]);
+        Assert.Equal("lab-probe/1.0", stored.Headers["User-Agent"]);
     }
 
     [Fact]
@@ -38,12 +67,47 @@ public sealed class SinkTests
             new("X-Note", "relay Bearer abc.def.ghi"),
         };
 
-        SinkRequest stored = recorder.Record("/webhook", headers, "{\"client_secret\":\"s3cret-value\",\"content\":\"hi\"}");
+        SinkRequest stored = recorder.Record(
+            "/webhook",
+            headers,
+            "{\"client_secret\":\"s3cret-value\",\"password\":\"my pass word\",\"content\":\"hi\"}");
 
         Assert.DoesNotContain("abc.def.ghi", stored.Headers["X-Note"], StringComparison.Ordinal);
         Assert.DoesNotContain("s3cret-value", stored.Body, StringComparison.Ordinal);
+        Assert.DoesNotContain("pass word", stored.Body, StringComparison.Ordinal);
+        Assert.DoesNotContain("my pass", stored.Body, StringComparison.Ordinal);
         Assert.Contains("[redacted]", stored.Body, StringComparison.Ordinal);
         Assert.Contains("\"content\":\"hi\"", stored.Body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Redact_CoversSpacedPasswordsEscapedJson_BasicAndTruncatedPem()
+    {
+        string body = @"{""password"":""correct horse battery""}"
+            + @"{""payload"":""{\""token\"":\""abc123\""}""}"
+            + "authorization: Basic dXNlcjpwdw==;"
+            + "bearer lowerCaseTok.en"
+            + "\n-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEF";
+
+        string redacted = SinkRecorder.Redact(body);
+
+        Assert.DoesNotContain("correct horse", redacted, StringComparison.Ordinal);
+        Assert.DoesNotContain("battery", redacted, StringComparison.Ordinal);
+        Assert.DoesNotContain("abc123", redacted, StringComparison.Ordinal);
+        Assert.DoesNotContain("dXNlcjpwdw==", redacted, StringComparison.Ordinal);
+        Assert.DoesNotContain("lowerCaseTok.en", redacted, StringComparison.Ordinal);
+        Assert.DoesNotContain("MIIEvQ", redacted, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Redact_StripsDiscordWebhookTokenFromPath()
+    {
+        var recorder = new SinkRecorder(TimeProvider.System);
+
+        SinkRequest stored = recorder.Record("/api/webhooks/123/abcDEF.ghi", [], "{}");
+
+        Assert.DoesNotContain("abcDEF.ghi", stored.Path, StringComparison.Ordinal);
+        Assert.StartsWith("/api/webhooks/123/", stored.Path, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -87,5 +151,62 @@ public sealed class SinkTests
 
         SinkRequest next = recorder.Record("/c", [], "3");
         Assert.Equal(3, next.Seq);
+    }
+
+    [Fact]
+    public async Task SinkHost_PostThenGet_ReturnsRecordedRequestWithoutAuthorization()
+    {
+        var recorder = new SinkRecorder(TimeProvider.System);
+        await using WebApplication app = SinkHost.Build(recorder, "http://127.0.0.1:0");
+        await app.StartAsync();
+        using var http = new HttpClient { BaseAddress = new Uri(app.Urls.First()) };
+
+        using var post = new HttpRequestMessage(HttpMethod.Post, "/webhook")
+        {
+            Content = new StringContent("{\"content\":\"hi\"}", Encoding.UTF8, "application/json"),
+        };
+        post.Headers.TryAddWithoutValidation("Authorization", "Bearer abc.def.ghi");
+        using HttpResponseMessage posted = await http.SendAsync(post);
+        Assert.Equal(HttpStatusCode.OK, posted.StatusCode);
+
+        using HttpResponseMessage listed = await http.GetAsync("/_sink/requests?since=0");
+        string json = await listed.Content.ReadAsStringAsync();
+        Assert.DoesNotContain("abc.def.ghi", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("Authorization", json, StringComparison.OrdinalIgnoreCase);
+
+        using (JsonDocument doc = JsonDocument.Parse(json))
+        {
+            Assert.Equal(1, doc.RootElement.GetArrayLength());
+            Assert.Equal("/webhook", doc.RootElement[0].GetProperty("path").GetString());
+            Assert.Contains("\"content\":\"hi\"", doc.RootElement[0].GetProperty("body").GetString(), StringComparison.Ordinal);
+        }
+
+        using HttpResponseMessage cleared = await http.DeleteAsync("/_sink/requests");
+        Assert.Equal(HttpStatusCode.NoContent, cleared.StatusCode);
+
+        using HttpResponseMessage empty = await http.GetAsync("/_sink/requests?since=0");
+        Assert.Equal("[]", await empty.Content.ReadAsStringAsync());
+
+        using HttpResponseMessage negative = await http.GetAsync("/_sink/requests?since=-1");
+        Assert.Equal(HttpStatusCode.BadRequest, negative.StatusCode);
+    }
+
+    [Fact]
+    public async Task SinkHost_LargeBody_IsReadOnlyUpToTheLimit()
+    {
+        var recorder = new SinkRecorder(TimeProvider.System);
+        await using WebApplication app = SinkHost.Build(recorder, "http://127.0.0.1:0");
+        await app.StartAsync();
+        using var http = new HttpClient { BaseAddress = new Uri(app.Urls.First()) };
+
+        using var post = new HttpRequestMessage(HttpMethod.Post, "/webhook")
+        {
+            Content = new StringContent(new string('y', 1024 * 1024), Encoding.UTF8, "text/plain"),
+        };
+        using HttpResponseMessage posted = await http.SendAsync(post);
+
+        IReadOnlyList<SinkRequest> stored = recorder.Since(0);
+        Assert.Single(stored);
+        Assert.True(stored[0].Body.Length <= SinkRecorder.MaxBodyChars);
     }
 }
