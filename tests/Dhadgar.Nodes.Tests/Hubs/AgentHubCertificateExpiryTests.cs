@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Security.Claims;
+using Dhadgar.Contracts.Agents;
 using Dhadgar.Contracts.Nodes;
 using Dhadgar.Nodes.Auth;
 using Dhadgar.Nodes.Data;
@@ -130,6 +131,22 @@ public sealed class AgentHubCertificateExpiryTests
             Arg.Any<Guid>(), Arg.Any<HeartbeatRequest>(), Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task Telemetry_WithoutNodeIdClaim_AnswersNodeNotFound()
+    {
+        using var db = CreateContext();
+        var context = Substitute.For<HubCallerContext>();
+        context.User.Returns(new ClaimsPrincipal(new ClaimsIdentity(
+            new List<Claim> { new("certificate_thumbprint", "abc") }, "mTLS")));
+        context.ConnectionAborted.Returns(CancellationToken.None);
+        using var hub = CreateHub(db, CreateHeartbeatService(), allowExpired: false, new FakeTimeProvider(Now), context);
+
+        var ack = await hub.Telemetry(new AgentTelemetry(Now, new Dictionary<string, double> { ["cpu"] = 1 }));
+
+        Assert.False(ack.Accepted);
+        Assert.Equal(AgentHubErrorCodes.NodeNotFound, ack.ErrorCode);
+    }
+
     private static async Task SeedRevokedCertificateAsync(NodesDbContext db, Guid nodeId, DateTime graceUntil)
     {
         db.AgentCertificates.Add(new AgentCertificate
@@ -195,7 +212,7 @@ public sealed class AgentHubCertificateExpiryTests
         HubCallerContext context)
     {
         var options = Options.Create(new MtlsOptions { AllowExpiredCertificates = allowExpired });
-        return new AgentHub(heartbeats, db, options, time, NullLogger<AgentHub>.Instance)
+        return new AgentHub(heartbeats, db, options, time, NullLogger<AgentHub>.Instance, new AgentConnectionRegistry())
         {
             Context = context,
         };

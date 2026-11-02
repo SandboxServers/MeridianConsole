@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using Dhadgar.Nodes.Auth;
 using Dhadgar.Nodes.Models;
 using Dhadgar.Nodes.Services;
 using Microsoft.AspNetCore.Mvc;
@@ -34,7 +36,7 @@ public static class ReservationEndpoints
         // Token-based endpoints (service-to-service)
         var tokenGroup = app.MapGroup("/reservations/{token:guid}")
             .WithTags("Capacity Reservations")
-            .RequireAuthorization();
+            .RequireAuthorization(ReservationCallerPolicy.Name);
 
         tokenGroup.MapGet("", GetReservation)
             .WithName("GetReservation")
@@ -159,9 +161,16 @@ public static class ReservationEndpoints
 
     private static async Task<IResult> GetReservation(
         Guid token,
+        ClaimsPrincipal user,
         ICapacityReservationService reservationService,
         CancellationToken ct = default)
     {
+        var denied = await RejectUnlessCallerOwnsAsync(token, user, reservationService, ct);
+        if (denied is not null)
+        {
+            return denied;
+        }
+
         var result = await reservationService.GetByTokenAsync(token, ct);
         if (!result.Success)
         {
@@ -174,9 +183,16 @@ public static class ReservationEndpoints
     private static async Task<IResult> ClaimReservation(
         Guid token,
         ClaimReservationRequest request,
+        ClaimsPrincipal user,
         ICapacityReservationService reservationService,
         CancellationToken ct = default)
     {
+        var denied = await RejectUnlessCallerOwnsAsync(token, user, reservationService, ct);
+        if (denied is not null)
+        {
+            return denied;
+        }
+
         var result = await reservationService.ClaimAsync(token, request.ServerId, ct);
 
         if (!result.Success)
@@ -199,10 +215,17 @@ public static class ReservationEndpoints
 
     private static async Task<IResult> ReleaseReservation(
         Guid token,
+        ClaimsPrincipal user,
         ICapacityReservationService reservationService,
         [FromQuery] string? reason = null,
         CancellationToken ct = default)
     {
+        var denied = await RejectUnlessCallerOwnsAsync(token, user, reservationService, ct);
+        if (denied is not null)
+        {
+            return denied;
+        }
+
         var result = await reservationService.ReleaseAsync(token, reason, ct);
 
         if (!result.Success)
@@ -217,5 +240,30 @@ public static class ReservationEndpoints
         }
 
         return Results.NoContent();
+    }
+
+    /// <summary>
+    /// Returns null when the caller's organization owns the reservation's node. Otherwise returns
+    /// the response to send: 403 when the caller has no parseable <c>org_id</c>, or 404
+    /// <c>reservation_not_found</c> when the token is unknown or belongs to another organization.
+    /// </summary>
+    private static async Task<IResult?> RejectUnlessCallerOwnsAsync(
+        Guid token,
+        ClaimsPrincipal user,
+        ICapacityReservationService reservationService,
+        CancellationToken ct)
+    {
+        if (!Guid.TryParse(user.FindFirst("org_id")?.Value, out var callerOrgId))
+        {
+            return ProblemDetailsHelper.Forbidden("forbidden");
+        }
+
+        var owningOrgId = await reservationService.GetOwningOrganizationIdAsync(token, ct);
+        if (owningOrgId != callerOrgId)
+        {
+            return ProblemDetailsHelper.NotFound("reservation_not_found");
+        }
+
+        return null;
     }
 }

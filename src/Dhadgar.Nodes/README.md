@@ -299,6 +299,8 @@ src/Dhadgar.Nodes/
 | POST | `/claim` | Claim reservation with server ID |
 | DELETE | `/` | Release reservation |
 
+These endpoints use the `ReservationCaller` policy: the caller must be a user principal with an `org_id` claim (agent principals, which carry a `node_id` claim, get 403; no parseable `org_id` gets 403). The reservation's node must belong to the caller's organization. An unknown token and another organization's reservation both return 404 `reservation_not_found`, so the token endpoints do not reveal whether a token exists.
+
 ---
 
 ## Database Schema
@@ -419,6 +421,12 @@ Recent migrations:
 - `20261027130000_AddMassTransitOutboxEntities` creates the MassTransit outbox and inbox tables (`InboxState`, `OutboxState`, `OutboxMessage`). `NodesDbContext` registered them earlier, but no migration created them (P16-ruling-1).
 - `20261027130100_AddAgentCertificateGraceUntil` adds the nullable `GraceUntil` column to `agent_certificates` (renewal grace window, D-S212).
 
+### Database resilience
+
+- **Retry policy:** `NodesRetryingExecutionStrategy` retries transient database failures 3 times, with a delay of at most 1 s. On a client-side connection failure (for example, after a Postgres restart left pooled connections dead), it also clears the Npgsql pool, so the retry opens a fresh connection.
+- **User-initiated transactions:** the retrying strategy rejects a user transaction that runs outside it. Any new user-initiated transaction must run inside `context.Database.CreateExecutionStrategy().ExecuteAsync(...)`, as `CapacityReservationService.ReserveAsync` does.
+- **Publishing is not transactional:** Nodes has no `UseBusOutbox()`, so `Publish` goes straight to the broker and is not part of the database transaction (F117). A retried operation must therefore use fixed ids so a republished event is identical. The outbox decision is pending (D-ML133).
+
 ---
 
 ## Events and Messaging
@@ -519,6 +527,16 @@ All events are published to RabbitMQ via MassTransit. Contracts are defined in `
 ---
 
 ## Security
+
+### User Authentication
+
+Users call the tenant endpoints under `/organizations/{organizationId}/...` with a JWT bearer token, validated against `Auth:Issuer`, `Auth:Audience` and `Auth:ClockSkewSeconds`. The `TenantScoped` policy also requires the `org_id` claim.
+
+### Authentication Scheme Selection
+
+The default scheme is the `NodesAuth` policy scheme (`NodesAuthenticationSchemes`). Requests under `AgentEndpointPrefix` (`/agents`) or `HubPathPrefix` (`/hubs/agent`) use mTLS; every other path uses the JWT bearer. A bearer token is never evaluated on agent paths and a client certificate is never evaluated on user paths.
+
+`AgentPolicy` accepts only an identity whose `node_id` came from mTLS client certificate validation. The node is read from the certificate's SPIFFE ID; no header, body or user token claim decides which node is calling.
 
 ### Agent Authentication
 
@@ -691,6 +709,26 @@ Agents hold a persistent SignalR connection to the Nodes service for heartbeats.
   | `node_decommissioned` | The node is decommissioned; no heartbeat is written |
   | `invalid_heartbeat` | The payload failed validation; nothing was written |
   | `heartbeat_failed` | Any other failure, including a revoked or expired certificate |
+
+- **Connect checks:** run in this order, and each failure aborts the connection:
+  1. the `X-Agent-Protocol` header (a missing header counts as `1`);
+  2. the `node_id` claim;
+  3. the client certificate is current (the rule above);
+  4. the node exists and is not decommissioned (`AsNoTracking`, selecting `OrganizationId` and `Status` only).
+
+  Only then does the connection join `AgentHubProtocol.NodeGroup(nodeId)` and get recorded in `IAgentConnectionRegistry`. The registry is removed again on disconnect. A decommissioned node is refused at connect, not at its first heartbeat.
+- **Registry:** `IAgentConnectionRegistry` tracks connection IDs per node (`IsConnected`, `ConnectedNodeCount`). It is a singleton with no scoped dependency. It is single-instance for the MVP. Scale-out across several Nodes instances needs a Redis backplane (ADR-0008) before the registry is shared.
+- **Frame limit:** `MaximumReceiveMessageSize` is `AgentHubProtocol.MaxReceiveMessageBytes` (512 KiB) for each escaped frame received from an agent. A larger frame closes the connection.
+- **`Telemetry(AgentTelemetry)`:** returns `AgentHubAck`. `AgentTelemetryValidator` runs before anything is logged, and nothing is written to the database. A valid message is logged at Debug with the node ID and metric count only.
+
+  | Field | Limit |
+  |-------|-------|
+  | `Timestamp` | not `default` |
+  | `Metrics` | non-null, at most 500 entries |
+  | Each metric name | 1 to 128 characters, no control, format or separator characters (such as U+202E or U+2028), no unpaired surrogates |
+  | Each metric value | finite |
+
+  Unknown members are ignored. A rejected message returns `invalid_telemetry` in `AgentHubAck.ErrorCode`. A message with no `node_id` claim returns `node_not_found`.
 
 ---
 

@@ -9,10 +9,13 @@ using Dhadgar.Nodes.Endpoints;
 using Dhadgar.Nodes.Hubs;
 using Dhadgar.Nodes.Observability;
 using Dhadgar.Nodes.Services;
+using Dhadgar.Nodes.Services.CommandSigning;
 using Dhadgar.ServiceDefaults;
 using Dhadgar.ServiceDefaults.Extensions;
+using Dhadgar.ServiceDefaults.Security;
 using Dhadgar.ServiceDefaults.Swagger;
 using MassTransit;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -43,7 +46,7 @@ builder.Services.AddOptions<NodesOptions>()
 builder.Services.AddSingleton<IValidateOptions<NodesOptions>, NodesOptions>();
 
 builder.Services.AddDbContext<NodesDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
+    NodesDatabase.Configure(options, builder.Configuration.GetConnectionString("Postgres")));
 
 // Note: PostgreSQL health check is already registered by AddDhadgarServiceDefaults
 // with HealthCheckDependencies.Postgres - no need to add it again here.
@@ -51,9 +54,13 @@ builder.Services.AddDbContext<NodesDbContext>(options =>
 // Register SignalR for the agent hub (shared framework; no package needed)
 builder.Services.AddSignalR(o =>
 {
-    o.MaximumReceiveMessageSize = 64 * 1024;
+    o.MaximumReceiveMessageSize = AgentHubProtocol.MaxReceiveMessageBytes;
     o.EnableDetailedErrors = false;
 });
+
+// Connection registry for the agent hub. Singleton: it holds no scoped service. Single-instance for the MVP;
+// scale-out needs a Redis backplane (ADR-0008).
+builder.Services.AddSingleton<IAgentConnectionRegistry, AgentConnectionRegistry>();
 
 // Register services
 builder.Services.AddScoped<INodeService, NodeService>();
@@ -67,8 +74,30 @@ builder.Services.AddScoped<ICapacityReservationService, CapacityReservationServi
 builder.Services.AddSingleton<ICaStorageProvider, LocalFileCaStorageProvider>();
 builder.Services.AddSingleton<ICertificateAuthorityService, CertificateAuthorityService>();
 
+// Register command signing (ECDSA P-256 key that signs agent commands, D-09)
+builder.Services.AddOptions<CommandSigningOptions>()
+    .Bind(builder.Configuration.GetSection(CommandSigningOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+builder.Services.AddSingleton<IValidateOptions<CommandSigningOptions>, CommandSigningOptions>();
+builder.Services.AddSingleton<ICommandSigner, CommandSigner>();
+
 // Register mTLS authentication services
 builder.Services.AddMtlsAuthentication(builder.Configuration);
+
+// User JWT beside agent mTLS. Nodes hosts no user hub, so no hub prefixes are passed.
+builder.Services.AddDhadgarJwtBearer(builder.Configuration, builder.Environment);
+
+// Default policy scheme: agent paths use mTLS, every other path uses JWT (D-35). Registered after both
+// schemes above, because each one sets DefaultScheme and the last registration wins.
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultScheme = NodesAuthenticationSchemes.Default;
+    options.DefaultChallengeScheme = NodesAuthenticationSchemes.Default;
+    options.DefaultForbidScheme = NodesAuthenticationSchemes.Default;
+})
+.AddPolicyScheme(NodesAuthenticationSchemes.Default, "Agent mTLS or user JWT",
+    o => o.ForwardDefaultSelector = NodesAuthenticationSchemes.SelectScheme);
 
 // Register audit services
 builder.Services.AddScoped<IAuditContextAccessor, AuditContextAccessor>();
@@ -134,6 +163,8 @@ builder.Services.AddMassTransit(x =>
 // Configure authorization
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton<IAuthorizationHandler, TenantScopedHandler>();
+builder.Services.AddSingleton<IAuthorizationHandler, AgentIdentityHandler>();
+builder.Services.AddSingleton<IAuthorizationHandler, ReservationCallerHandler>();
 
 builder.Services.AddAuthorizationBuilder()
     .AddPolicy("TenantScoped", policy =>
@@ -146,9 +177,11 @@ builder.Services.AddAuthorizationBuilder()
     })
     .AddPolicy("AgentPolicy", policy =>
     {
-        // Require authenticated user (via mTLS certificate in production)
+        // Require an agent identity: a node_id from the mTLS client certificate, never a user token
         policy.RequireAuthenticatedUser();
-    });
+        policy.AddRequirements(new AgentIdentityRequirement());
+    })
+    .AddPolicy(ReservationCallerPolicy.Name, ReservationCallerPolicy.Configure);
 
 var app = builder.Build();
 
@@ -176,6 +209,18 @@ try
 catch (Exception ex)
 {
     app.Logger.LogError(ex, "Failed to initialize Certificate Authority. Certificate operations will fail.");
+}
+
+// Load or create the command signing key on startup
+try
+{
+    var commandSigner = app.Services.GetRequiredService<ICommandSigner>();
+    await commandSigner.InitializeAsync();
+    app.Logger.LogInformation("Command signer initialized successfully");
+}
+catch (Exception ex)
+{
+    app.Logger.LogError(ex, "Failed to initialize command signer. Agent enrollment will fail.");
 }
 
 // Map endpoints

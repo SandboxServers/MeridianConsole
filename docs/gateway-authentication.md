@@ -46,8 +46,7 @@ The Gateway uses Authority-based JWT validation, meaning it fetches JWKS (JSON W
 | Policy | Description | Usage |
 |--------|-------------|-------|
 | `Anonymous` | No authentication required | Health checks, public endpoints |
-| `TenantScoped` | Requires valid JWT with `org_id` claim | Most API routes |
-| `Agent` | Requires valid JWT with `client_type: agent` (defined; no route uses it since D-S26) | Reserved |
+| `TenantScoped` | Any authenticated user. The Gateway does not compare the route's `organizationId` with the token's `org_id`; the backend service must (404 for another org's resource) | Most API routes |
 | `AgentCertificate` | Requires a TLS client certificate whose issuer CN is `AgentCertificateProfile.CaCommonName`; Nodes validates the rest (D-S25) | `agents-route`, `agent-hub-route` |
 | `DenyAll` | Always denies access | Internal endpoint blocking |
 
@@ -69,6 +68,10 @@ Internal endpoints (e.g., `/api/v1/identity/internal/*`) are blocked from extern
 1. A high-priority route (Order: 1) matching internal paths
 2. `DenyAll` policy that always returns 403 Forbidden
 
+### Credential separation
+
+User JWTs and agent client certificates do not open each other's routes. Tenant routes (`TenantScoped`) accept only a bearer token, so a certificate-only request is rejected with 401. Agent routes (`agents-route`, `agent-hub-route`, `AgentCertificate`) accept only a certificate whose issuer common name is the agent CA's; Nodes validates the chain, SPIFFE ID and revocation. A valid user JWT on them is rejected with 403. The hub access token in a query string is read only for `/hubs/console`, never for agent routes or organization REST routes. Tokens and certificates must not reach the Gateway logs. `GatewayAuthSeparationTests` pins these rules: each rejection checks the Gateway status and that the forwarder recorded nothing, and each has a positive twin that differs only in the credential.
+
 ## Request Enrichment
 
 The `RequestEnrichmentMiddleware` extracts claims from validated JWTs and injects trusted headers:
@@ -77,8 +80,6 @@ The `RequestEnrichmentMiddleware` extracts claims from validated JWTs and inject
 |-------|--------|-------------|
 | `org_id` | `X-Tenant-Id` | Organization/tenant identifier |
 | `sub` | `X-User-Id` | User identifier |
-| `client_type` | `X-Client-Type` | Client type (user, agent) |
-| `agent_id` | `X-Agent-Id` | Agent identifier (agents only) |
 | `role` | `X-Roles` | Comma-separated roles |
 
 ### Security Headers

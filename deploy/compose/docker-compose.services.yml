@@ -107,6 +107,10 @@ services:
       # it beyond 127.0.0.1.
       Mtls__ForwardedCertificate__Enabled: "true"
       Mtls__ForwardedCertificate__TrustedProxies__0: "172.16.0.0/12"
+      Auth__Issuer: https://dev.meridianconsole.com/api/v1/identity
+      Auth__Audience: meridian-api
+      Auth__MetadataAddress: http://identity:8080/.well-known/openid-configuration
+      Auth__InternalBaseUrl: http://identity:8080
     ports:
       - "127.0.0.1:5040:8080"
     depends_on: *service-depends
@@ -202,7 +206,7 @@ services:
       WIF_CLIENT_ID: betterauth-client
       WIF_CLIENT_SECRET: ${BETTERAUTH_WIF_CLIENT_SECRET:-betterauth-client-dev-secret-change-in-prod}
       BETTER_AUTH_URL: https://dev.meridianconsole.com/api/v1/betterauth
-      BETTER_AUTH_TRUSTED_ORIGINS: https://dev.meridianconsole.com,https://cart.meridianconsole.com,https://panel.meridianconsole.com,http://localhost:4321,http://localhost:4322
+      BETTER_AUTH_TRUSTED_ORIGINS: https://dev.meridianconsole.com,https://panel.meridianconsole.com,http://localhost:4321
       BETTER_AUTH_CLIENT_APPS: panel,shop
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432

@@ -103,12 +103,6 @@ builder.Services.AddAuthorization(options =>
         policy.RequireAuthenticatedUser();
     });
 
-    options.AddPolicy("Agent", policy =>
-    {
-        policy.RequireAuthenticatedUser();
-        policy.RequireClaim("client_type", "agent");
-    });
-
     // The TLS client certificate must be issued by the agent CA. Nodes validates the rest of the chain and the SPIFFE ID.
     options.AddPolicy("AgentCertificate", policy =>
     {

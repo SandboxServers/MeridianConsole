@@ -1,9 +1,13 @@
 extern alias gateway;
 
+using System.Collections.Concurrent;
 using System.Net;
+using System.Net.Http;
 using Dhadgar.Agent.Core.Authentication;
 using Dhadgar.Nodes.Tests;
 using Dhadgar.Nodes.Tests.Integration.AgentSeam;
+using Dhadgar.Testing.Authentication;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -16,14 +20,25 @@ using AgentEnrollmentService = Dhadgar.Agent.Core.Authentication.EnrollmentServi
 
 namespace Dhadgar.AgentSeam.Tests;
 
+/// <summary>A request the Gateway forwarded to a cluster, recorded before it reached the backend.</summary>
+/// <param name="ClusterId">The YARP cluster the request was forwarded to.</param>
+/// <param name="Method">The HTTP method.</param>
+/// <param name="Path">The path after the Gateway's transforms (what the backend saw).</param>
+public sealed record ForwardedRequest(string ClusterId, string Method, string Path);
+
 /// <summary>
 /// Gateway factory whose YARP forwarder sends every <c>nodes</c> request into the Nodes <see cref="TestServer"/>.
 /// The connection to Nodes has no TLS certificate; the Gateway is the only trusted proxy and it is at 10.99.0.10.
 /// </summary>
-public sealed class GatewayTestFactory(TestServer nodesServer) : WebApplicationFactory<gateway::Program>
+public sealed class GatewayTestFactory(TestServer nodesServer, Action<IServiceCollection>? configureTestServices = null) : WebApplicationFactory<gateway::Program>
 {
     /// <summary>The address Nodes sees as the Gateway's connection. It is inside the trusted-proxy range.</summary>
     public static readonly IPAddress GatewayAddress = IPAddress.Parse("10.99.0.10");
+
+    private readonly ConcurrentQueue<ForwardedRequest> _forwarded = new();
+
+    /// <summary>Every request the Gateway forwarded, in order. A rejected request that never reached a backend is absent.</summary>
+    public IReadOnlyCollection<ForwardedRequest> ForwardedRequests => _forwarded;
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -41,24 +56,37 @@ public sealed class GatewayTestFactory(TestServer nodesServer) : WebApplicationF
         builder.ConfigureTestServices(services =>
         {
             services.RemoveAll<IForwarderHttpClientFactory>();
-            services.AddSingleton<IForwarderHttpClientFactory>(new NodesForwarderHttpClientFactory(nodesServer));
+            services.AddSingleton<IForwarderHttpClientFactory>(new NodesForwarderHttpClientFactory(nodesServer, _forwarded));
+            configureTestServices?.Invoke(services);
         });
     }
 
     /// <summary>
     /// Returns a new invoker per call (YARP disposes the one it is given). Each one routes to Nodes with the
-    /// Gateway's address as the remote address and no client certificate.
+    /// Gateway's address as the remote address and no client certificate, and records what it forwards.
     /// </summary>
-    private sealed class NodesForwarderHttpClientFactory(TestServer nodesServer) : IForwarderHttpClientFactory
+    private sealed class NodesForwarderHttpClientFactory(TestServer nodesServer, ConcurrentQueue<ForwardedRequest> forwarded) : IForwarderHttpClientFactory
     {
         public HttpMessageInvoker CreateClient(ForwarderHttpClientContext context)
         {
             // Ownership passes to the HttpMessageInvoker (disposeHandler: true), which YARP disposes.
 #pragma warning disable CA2000
-            return new HttpMessageInvoker(
-                nodesServer.CreateHandler(ctx => ctx.Connection.RemoteIpAddress = GatewayAddress),
-                disposeHandler: true);
+            var recorder = new RecordingHandler(context.ClusterId, forwarded)
+            {
+                InnerHandler = nodesServer.CreateHandler(ctx => ctx.Connection.RemoteIpAddress = GatewayAddress),
+            };
+            return new HttpMessageInvoker(recorder, disposeHandler: true);
 #pragma warning restore CA2000
+        }
+    }
+
+    /// <summary>Enqueues each forwarded request, then passes it to the TestServer handler.</summary>
+    private sealed class RecordingHandler(string clusterId, ConcurrentQueue<ForwardedRequest> forwarded) : DelegatingHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            forwarded.Enqueue(new ForwardedRequest(clusterId, request.Method.Method, request.RequestUri!.AbsolutePath));
+            return base.SendAsync(request, cancellationToken);
         }
     }
 }
@@ -73,10 +101,12 @@ public sealed class GatewayNodesHarness : IDisposable
     private readonly GatewayTestFactory _gateway;
 
     /// <summary>Creates both hosts, writing the CA material to <paramref name="caDirectory"/>.</summary>
-    public GatewayNodesHarness(string caDirectory)
+    /// <param name="caDirectory">Directory for CA material. The caller owns cleanup.</param>
+    /// <param name="realUserAuth">When true, Nodes and the Gateway validate user JWTs from <see cref="SeamJwt"/> through their own default schemes instead of the test scheme.</param>
+    public GatewayNodesHarness(string caDirectory, bool realUserAuth = false)
     {
         NodesBase = new NodesWebApplicationFactory();
-        _nodes = AgentSeamHarness.CreateFactoryWithRealCa(
+        var nodes = AgentSeamHarness.CreateFactoryWithRealCa(
             NodesBase,
             caDirectory,
             enableMtls: true,
@@ -85,7 +115,23 @@ public sealed class GatewayNodesHarness : IDisposable
                 o.ForwardedCertificate.Enabled = true;
                 o.ForwardedCertificate.TrustedProxies = ["10.99.0.0/16"];
             });
-        _gateway = new GatewayTestFactory(_nodes.Server);
+
+        if (realUserAuth)
+        {
+            // Undo the test-scheme override so Program.cs's NodesAuth selector and the JWT scheme apply.
+            nodes = nodes.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+            {
+                services.PostConfigure<AuthenticationOptions>(options =>
+                {
+                    options.DefaultAuthenticateScheme = null;
+                    options.DefaultChallengeScheme = null;
+                });
+                SeamJwt.Apply(services);
+            }));
+        }
+
+        _nodes = nodes;
+        _gateway = new GatewayTestFactory(_nodes.Server, realUserAuth ? SeamJwt.Apply : null);
     }
 
     /// <summary>The Nodes factory the harness was built from. Its <c>TimeProvider</c> is the fake clock.</summary>
@@ -96,6 +142,9 @@ public sealed class GatewayNodesHarness : IDisposable
 
     /// <summary>The Gateway test server. Agents connect here.</summary>
     public TestServer GatewayServer => _gateway.Server;
+
+    /// <summary>Requests the Gateway forwarded to a backend. Rejections that never reached a backend leave no entry.</summary>
+    public IReadOnlyCollection<ForwardedRequest> ForwardedRequests => _gateway.ForwardedRequests;
 
     /// <summary>Creates a one-time enrollment token in the Nodes database.</summary>
     public Task<string> CreateEnrollmentTokenAsync(Guid orgId) =>

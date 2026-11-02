@@ -1,5 +1,7 @@
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text.Encodings.Web;
+using Dhadgar.Contracts.Agents;
 using Dhadgar.Nodes;
 using Dhadgar.Nodes.Audit;
 using Dhadgar.Nodes.Auth;
@@ -7,6 +9,7 @@ using Dhadgar.Nodes.BackgroundServices;
 using Dhadgar.Nodes.Data;
 using Dhadgar.Nodes.Data.Entities;
 using Dhadgar.Nodes.Services;
+using Dhadgar.Nodes.Services.CommandSigning;
 using MassTransit;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
@@ -31,6 +34,9 @@ public sealed class NodesWebApplicationFactory : WebApplicationFactory<Program>
     private readonly string _databaseName = $"nodes-tests-{Guid.NewGuid()}";
     public TestNodesEventPublisher EventPublisher { get; } = new();
     public SaveChangesFaultInjector Faults { get; } = new();
+
+    /// <summary>Command signer used by the factory. Tests can mark it not ready to simulate a failed key load.</summary>
+    public TestCommandSigner Signer { get; } = new();
     public FakeTimeProvider TimeProvider { get; } = new(DateTimeOffset.UtcNow);
     public TestCertificateAuthorityService CaService { get; private set; } = null!;
 
@@ -38,6 +44,12 @@ public sealed class NodesWebApplicationFactory : WebApplicationFactory<Program>
     /// Extra configuration for this factory's host, read when the host is built. Set before the first request.
     /// </summary>
     public Dictionary<string, string?> Settings { get; } = new();
+
+    /// <summary>
+    /// When true, the host keeps the production <c>NodesDbContext</c> registration (Npgsql, with its retrying
+    /// execution strategy) instead of the InMemory replacement. Set it with a connection string in <see cref="Settings"/>.
+    /// </summary>
+    public bool UseProductionDbContext { get; init; }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -58,18 +70,21 @@ public sealed class NodesWebApplicationFactory : WebApplicationFactory<Program>
 
         builder.ConfigureServices(services =>
         {
-            // Remove existing DbContext registration
-            services.RemoveAll<DbContextOptions<NodesDbContext>>();
+            if (!UseProductionDbContext)
+            {
+                // Remove existing DbContext registration
+                services.RemoveAll<DbContextOptions<NodesDbContext>>();
 
-            var efProvider = new ServiceCollection()
-                .AddEntityFrameworkInMemoryDatabase()
-                .BuildServiceProvider();
+                var efProvider = new ServiceCollection()
+                    .AddEntityFrameworkInMemoryDatabase()
+                    .BuildServiceProvider();
 
-            services.AddDbContext<NodesDbContext>(options =>
-                options.UseInMemoryDatabase(_databaseName)
-                    .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
-                    .UseInternalServiceProvider(efProvider)
-                    .AddInterceptors(Faults));
+                services.AddDbContext<NodesDbContext>(options =>
+                    options.UseInMemoryDatabase(_databaseName)
+                        .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
+                        .UseInternalServiceProvider(efProvider)
+                        .AddInterceptors(Faults));
+            }
 
             // Remove all MassTransit services and replace with test publisher
             // This removes bus, health checks, and other MassTransit infrastructure
@@ -95,6 +110,10 @@ public sealed class NodesWebApplicationFactory : WebApplicationFactory<Program>
             services.RemoveAll<ICaStorageProvider>();
             services.RemoveAll<ICertificateAuthorityService>();
             services.AddSingleton<ICertificateAuthorityService>(CaService);
+
+            // Replace the command signer with an in-memory key so tests never write a key file
+            services.RemoveAll<ICommandSigner>();
+            services.AddSingleton<ICommandSigner>(Signer);
 
             // Disable mTLS for testing (tests use TestNodesAuthHandler instead)
             services.Configure<MtlsOptions>(options =>
@@ -142,8 +161,11 @@ public sealed class NodesWebApplicationFactory : WebApplicationFactory<Program>
             services.RemoveAll<IAuditContextAccessor>();
             services.AddScoped<IAuditContextAccessor, TestNodesAuditContextAccessor>();
 
-            // Add a startup filter to initialize the database
-            services.AddSingleton<IStartupFilter>(new DbInitStartupFilter());
+            // Add a startup filter to initialize the database (InMemory only; production Postgres is not created here)
+            if (!UseProductionDbContext)
+            {
+                services.AddSingleton<IStartupFilter>(new DbInitStartupFilter());
+            }
 
             // Add problem details and endpoint exploration for better error reporting
             // This ensures minimal API binding infrastructure is properly configured
@@ -269,6 +291,60 @@ public sealed class NodesWebApplicationFactory : WebApplicationFactory<Program>
             CreatedAt = TimeProvider.GetUtcNow().UtcDateTime
         };
     }
+}
+
+/// <summary>
+/// Command signer for tests: holds a fresh in-memory P-256 key, so no key file is written.
+/// </summary>
+public sealed class TestCommandSigner : ICommandSigner, IDisposable
+{
+    private readonly ECDsa _key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+    private readonly string _publicKeySpkiBase64;
+    private readonly string _keyId;
+
+    /// <summary>When false, the key accessors throw, as they do for a signer whose initialization failed.</summary>
+    public bool IsReady { get; set; } = true;
+
+    public TestCommandSigner()
+    {
+        var spki = _key.ExportSubjectPublicKeyInfo();
+        _publicKeySpkiBase64 = Convert.ToBase64String(spki);
+        _keyId = AgentCommandSigning.ComputeKeyId(spki);
+    }
+
+    public string PublicKeySpkiBase64 => IsReady
+        ? _publicKeySpkiBase64
+        : throw new InvalidOperationException("Command signer is not initialized.");
+
+    public string KeyId => IsReady
+        ? _keyId
+        : throw new InvalidOperationException("Command signer is not initialized.");
+
+    public Task InitializeAsync(CancellationToken ct = default) => Task.CompletedTask;
+
+    public AgentCommandEnvelope Sign(AgentCommandEnvelope envelope)
+    {
+        ArgumentNullException.ThrowIfNull(envelope);
+        // Same guards as CommandSigner.Sign, so tests that sign through the factory cannot pass an envelope the real signer rejects.
+        if (envelope.CommandId == Guid.Empty || envelope.NodeId == Guid.Empty || envelope.OrganizationId == Guid.Empty)
+        {
+            throw new ArgumentException("CommandId, NodeId and OrganizationId must be set.", nameof(envelope));
+        }
+
+        var lifetime = envelope.ExpiresAt - envelope.IssuedAt;
+        if (lifetime <= TimeSpan.Zero || lifetime > TimeSpan.FromSeconds(AgentMessageLimits.MaxCommandLifetimeSeconds))
+        {
+            throw new ArgumentException(
+                $"Command lifetime must be greater than zero and at most {AgentMessageLimits.MaxCommandLifetimeSeconds} seconds.",
+                nameof(envelope));
+        }
+
+        var input = AgentCommandSigning.BuildSigningInput(envelope);
+        var signature = _key.SignData(input, HashAlgorithmName.SHA256, DSASignatureFormat.IeeeP1363FixedFieldConcatenation);
+        return envelope with { Signature = Convert.ToBase64String(signature), SigningKeyId = _keyId };
+    }
+
+    public void Dispose() => _key.Dispose();
 }
 
 /// <summary>

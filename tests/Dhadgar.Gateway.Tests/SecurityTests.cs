@@ -114,8 +114,7 @@ public class SecurityTests
         await middleware.InvokeAsync(context);
         await context.Response.CompleteAsync();
 
-        Assert.Equal("real-agent-from-jwt", context.Request.Headers["X-Agent-Id"].ToString());
-        Assert.NotEqual("spoofed-agent", context.Request.Headers["X-Agent-Id"].ToString());
+        Assert.False(context.Request.Headers.ContainsKey("X-Agent-Id"));
     }
 
     [Fact]
