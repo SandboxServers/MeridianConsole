@@ -77,7 +77,7 @@ public static class FlakeCheckJob
         }
 
         string? specFile = SpecFileOf(run.Value!);
-        if (specFile is null || run.Value!["seed"] is not JsonValue seedValue || !seedValue.TryGetValue(out long seed) || seed < 0)
+        if (specFile is null || BundleSeed.ReadSeed(run.Value!) is not { } seed)
         {
             return Result<FlakeCheckPlan>.Failure("[Lab.InvalidArgument] the run has no spec or seed to rerun");
         }
@@ -92,15 +92,26 @@ public static class FlakeCheckJob
         IReadOnlyList<RowGradeEntry> selected;
         if (rowIds is { Count: > 0 })
         {
+            // A row is named by its id, or by its section/row key (the form the job result lists). A bare id that
+            // occurs in more than one section is ambiguous, so it is refused rather than guessed.
             foreach (string rowId in rowIds)
             {
-                if (!entries.Value!.Any(entry => entry.RowId == rowId))
+                bool byKey = rowId.Contains('/');
+                List<RowGradeEntry> hits = entries.Value!.Where(entry => byKey ? entry.Key == rowId : entry.RowId == rowId).ToList();
+                if (hits.Count == 0)
                 {
                     return Result<FlakeCheckPlan>.Failure("[Lab.NotFound] row " + rowId + " is not in the run");
                 }
+
+                if (!byKey && hits.Select(entry => entry.Section).Distinct(StringComparer.Ordinal).Count() > 1)
+                {
+                    return Result<FlakeCheckPlan>.Failure("[Lab.InvalidArgument] row " + rowId + " is ambiguous; name it as section/row");
+                }
             }
 
-            selected = entries.Value!.Where(entry => rowIds.Contains(entry.RowId, StringComparer.Ordinal)).ToList();
+            selected = entries.Value!
+                .Where(entry => rowIds.Any(rowId => rowId.Contains('/') ? entry.Key == rowId : entry.RowId == rowId))
+                .ToList();
         }
         else
         {
@@ -115,7 +126,7 @@ public static class FlakeCheckJob
         var plan = new FlakeCheckPlan(
             runId,
             specFile,
-            (ulong)seed,
+            seed,
             selected.Select(entry => entry.Section).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList(),
             selected.Select(entry => entry.RowId).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList(),
             selected.Select(entry => entry.Key).Order(StringComparer.Ordinal).ToList(),
@@ -229,7 +240,7 @@ public static class FlakeCheckJob
         var result = new JsonObject
         {
             ["source_run_id"] = plan.SourceRunId,
-            ["seed"] = (long)plan.Seed,
+            ["seed"] = plan.Seed,
             ["reruns"] = plan.Reruns,
             ["rows"] = new JsonArray(plan.Keys.Select(key => (JsonNode)JsonValue.Create(key)!).ToArray()),
             ["runs"] = runs,

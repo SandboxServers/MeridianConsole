@@ -19,6 +19,29 @@ public sealed class DraftWriterTests : IDisposable
     public void Dispose() => _fixture.Dispose();
 
     [Fact]
+    public void Draft_SeedAboveLongMax_PrintsUnsignedSeed()
+    {
+        var bucket = new ResultsDb.BucketRecord("sig-h1", "row", "2026-10-27T00:00:00Z", "2026-10-28T00:00:00Z", 1, "new", null, null,
+            "new", null, null);
+        var source = new DraftWriter.DraftSource(bucket, "row fails: enroll", "run-h", "run-h", "build-9", 12499590173714643239UL);
+
+        string text = DraftWriter.Render(source);
+
+        Assert.Contains("- Seed: 12499590173714643239\n", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task WriteAsync_StoredHighSeed_DraftPrintsUnsignedSeed()
+    {
+        await _fixture.PlantSignatureAsync("sig-h2", "row fails: enroll", unchecked((long)12499590173714643239UL));
+
+        Result<string> result = await _fixture.Writer.WriteAsync("sig-h2", CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error);
+        Assert.Contains("- Seed: 12499590173714643239\n", File.ReadAllText(result.Value), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Render_Golden_HasEverySectionAndEndsWithTheDraftOnlyLine()
     {
         var bucket = new ResultsDb.BucketRecord("sig-g1", "row", "2026-10-27T00:00:00Z", "2026-10-28T00:00:00Z", 4, "new", null, null,

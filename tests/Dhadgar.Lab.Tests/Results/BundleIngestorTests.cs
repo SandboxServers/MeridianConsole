@@ -24,6 +24,9 @@ public sealed class BundleIngestorTests : IDisposable
 {
     private static readonly DateTimeOffset Start = new(2026, 10, 28, 0, 0, 30, TimeSpan.Zero);
 
+    /// <summary>A seed above <c>long.MaxValue</c> (C17, F119).</summary>
+    private const ulong HighSeed = 12499590173714643239UL;
+
     private readonly string _root = Path.Combine(Path.GetTempPath(), "lab-ingest-" + Path.GetRandomFileName());
     private readonly string _uatRuns;
     private readonly PathValidator _validator = new(NullLogger<PathValidator>.Instance);
@@ -47,6 +50,64 @@ public sealed class BundleIngestorTests : IDisposable
         {
             // A WAL file still open on a failing test; the temp folder is cleaned by the OS.
         }
+    }
+
+    [Fact]
+    public async Task Ingest_SeedAboveLongMax_StoresBitPattern()
+    {
+        string folder = BundleFixtures.Write(_uatRuns, "run-high", "b1", 42, new RowSpec("nodes", "enroll", "PASS"));
+        SetSeed(folder, HighSeed);
+        using ResultsDb db = ResultsDb.Open(Path.Combine(_root, "results"), _validator).Value;
+        BundleIngestor ingestor = NewIngestor(db);
+
+        Result<IngestResult> ingested = await ingestor.IngestAsync(folder, [_uatRuns], CancellationToken.None);
+
+        Assert.True(ingested.IsSuccess, ingested.Error);
+        Assert.Equal(unchecked((long)HighSeed), db.RunOf("run-high").Value!.Seed);
+        Assert.Single(db.GradesOf("nodes", "enroll", unchecked((long)HighSeed)).Value!);
+    }
+
+    [Fact]
+    public async Task Ingest_TwoHighSeedRunsDifferentSeeds_NoFlake()
+    {
+        string first = BundleFixtures.Write(_uatRuns, "run-h1", "b1", 42, new RowSpec("nodes", "enroll", "PASS"));
+        SetSeed(first, ulong.MaxValue - 1);
+        string second = BundleFixtures.Write(_uatRuns, "run-h2", "b1", 42,
+            new RowSpec("nodes", "enroll", "FAIL", ClauseState: "NotHeld"));
+        SetSeed(second, ulong.MaxValue - 2);
+        using ResultsDb db = ResultsDb.Open(Path.Combine(_root, "results"), _validator).Value;
+        BundleIngestor ingestor = NewIngestor(db);
+
+        Assert.True((await ingestor.IngestAsync(first, [_uatRuns], CancellationToken.None)).IsSuccess);
+        Assert.True((await ingestor.IngestAsync(second, [_uatRuns], CancellationToken.None)).IsSuccess);
+
+        Assert.Equal(0, db.CountFlakes());
+    }
+
+    [Fact]
+    public async Task QueryView_SeedAboveLongMax_ReadsBackUnsigned()
+    {
+        string folder = BundleFixtures.Write(_uatRuns, "run-qv", "b1", 42, new RowSpec("nodes", "enroll", "PASS"));
+        SetSeed(folder, HighSeed);
+        using ResultsDb db = ResultsDb.Open(Path.Combine(_root, "results"), _validator).Value;
+        Assert.True((await NewIngestor(db).IngestAsync(folder, [_uatRuns], CancellationToken.None)).IsSuccess);
+
+        Result<IReadOnlyList<JsonObject>> runs = db.QueryView("runs", null, null);
+        Result<IReadOnlyList<JsonObject>> rows = db.QueryView("rows", null, null);
+
+        Assert.True(runs.IsSuccess, runs.Error);
+        Assert.True(rows.IsSuccess, rows.Error);
+        Assert.Equal(HighSeed, runs.Value!.Single()["seed"]!.GetValue<ulong>());
+        Assert.Equal(HighSeed, rows.Value!.First()["seed"]!.GetValue<ulong>());
+    }
+
+    /// <summary>Rewrites a bundle's run.json seed as an unsigned number (the fixture writes a long).</summary>
+    private static void SetSeed(string folder, ulong seed)
+    {
+        string file = Path.Combine(folder, "run.json");
+        var run = (JsonNode.Parse(File.ReadAllText(file)) as JsonObject)!;
+        run["seed"] = seed;
+        File.WriteAllText(file, run.ToJsonString());
     }
 
     [Fact]

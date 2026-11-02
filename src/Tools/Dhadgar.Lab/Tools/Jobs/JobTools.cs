@@ -132,7 +132,7 @@ public sealed class FlakeCheckTool : LabTool<FlakeCheckArgs>
     public override string Name => "results_flake_check";
 
     /// <inheritdoc />
-    public override string Description => "Starts a flake check: reruns the named rows (default: the run's failed rows) of run_id with the same seed and the current build, reruns times (1 to 5, default 2), through uat_run. Returns job_id; follow it with job_status.";
+    public override string Description => "Starts a flake check: reruns the named rows (default: the run's failed rows) of run_id with the same seed and the current build, reruns times (1 to 5, default 2), through uat_run. rows takes row ids or section/row keys. Returns job_id; follow it with job_status.";
 
     /// <inheritdoc />
     protected override async Task<Result<object>> ExecuteAsync(FlakeCheckArgs args, LabCallContext context, CancellationToken ct)

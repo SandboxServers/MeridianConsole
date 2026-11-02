@@ -143,14 +143,14 @@ public sealed partial class DraftWriter
         string firstRun = runs.Value.Count > 0 ? runs.Value[0] : "none";
         string lastRun = runs.Value.Count > 0 ? runs.Value[^1] : "none";
         string? build = null;
-        long seed = 0;
+        ulong seed = 0;
         if (runs.Value.Count > 0)
         {
             Result<RunRecord> run = db.RunOf(lastRun);
             if (run.IsSuccess)
             {
                 build = run.Value.BuildId;
-                seed = run.Value.Seed;
+                seed = BundleSeed.FromStored(run.Value.Seed);
             }
         }
 
@@ -175,5 +175,5 @@ public sealed partial class DraftWriter
 
     /// <summary>The facts a draft is rendered from.</summary>
     internal sealed record DraftSource(ResultsDb.BucketRecord Bucket, string SignatureText, string FirstRun, string LastRun,
-        string? BuildId, long Seed);
+        string? BuildId, ulong Seed);
 }

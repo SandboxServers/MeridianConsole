@@ -167,7 +167,7 @@ public sealed class BundleIngestor
             }
 
             rowRecords.Add(new RowRecord(runId, row.Section, row.RowId, LedgerRenderer.ResultText(row.Grade),
-                row.Reason is null ? null : _scrub(row.Reason), ParsedSeed(run), row.KnownIssue, verdict.PrimaryId,
+                row.Reason is null ? null : _scrub(row.Reason), BundleSeed.ToStored(BundleSeed.ReadSeed(run) ?? 0), row.KnownIssue, verdict.PrimaryId,
                 JsonSerializer.Serialize(verdict.SignatureIds), verdict.KnownMatchText, row.StartedAt, row.EndedAt));
 
             foreach (ParsedViolation violation in row.Violations)
@@ -202,7 +202,7 @@ public sealed class BundleIngestor
             return Result<IngestResult>.Failure(write.Error);
         }
 
-        Result flakes = DetectFlakes(Text(run, "build", "id"), ParsedSeed(run), rows.Value);
+        Result flakes = DetectFlakes(Text(run, "build", "id"), BundleSeed.ToStored(BundleSeed.ReadSeed(run) ?? 0), rows.Value);
         if (flakes.IsFailure)
         {
             return Result<IngestResult>.Failure(flakes.Error);
@@ -235,7 +235,7 @@ public sealed class BundleIngestor
             RunId: runId,
             Kind: Text(run, "kind") ?? DefaultKind,
             Label: Text(run, "label") is { } label ? _scrub(label) : null,
-            Seed: ParsedSeed(run),
+            Seed: BundleSeed.ToStored(BundleSeed.ReadSeed(run) ?? 0),
             BuildId: Text(run, "build", "id"),
             CommitSha: Text(run, "build", "commit"),
             Dirty: Bool(run, "build", "dirty"),
@@ -484,9 +484,6 @@ public sealed class BundleIngestor
             return Result<JsonObject>.Failure("[Lab.InvalidArgument] a bundle file is not valid JSON");
         }
     }
-
-    private static long ParsedSeed(JsonObject run) =>
-        run["seed"] is JsonValue value && value.TryGetValue(out long seed) ? seed : 0;
 
     internal static IEnumerable<JsonObject> Objects(JsonObject obj, string key) =>
         (obj[key] as JsonArray ?? new JsonArray()).OfType<JsonObject>();

@@ -630,6 +630,7 @@ public sealed class ResultsDb : IDisposable
                     item[reader.GetName(i)] = raw switch
                     {
                         DBNull => null,
+                        long number when reader.GetName(i) == "seed" => JsonValue.Create(BundleSeed.FromStored(number)),
                         long number => JsonValue.Create(number),
                         double real => JsonValue.Create(real),
                         string text => JsonValue.Create(text),
