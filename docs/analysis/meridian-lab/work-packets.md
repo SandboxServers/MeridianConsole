@@ -28,7 +28,7 @@ https://claude.ai/code/session_015Wz3WiSWFFL9NvwfvRqhrt
 - **Lock files.** `RestorePackagesWithLockFile=true`. A packet that adds a project or a package runs `dotnet restore <csproj> --force-evaluate` and commits every changed `packages.lock.json`.
 - **Docker, Windows containers and network.** Tests tagged `RequiresDocker` need Docker Desktop's Linux engine; `RequiresWindowsContainers` also needs `MERIDIAN_LAB_WINDOWS_CONTAINERS=1` and the Windows engine named by L00; `RequiresNetwork` pulls images or packages. CI (ubuntu-24.04) excludes all three with `--filter "RequiresDocker!=true&RequiresWindowsContainers!=true&RequiresNetwork!=true"`. The packet-coder runs them locally when the packet's checks list them. Nothing in the lab needs elevation; the daemon refuses to run elevated (D-ML12 is superseded by the container pool, D-ML29; the Machine gate is reserved, D-ML43).
 - **L00 is not a code packet.** A Sonnet `general-purpose` agent runs it and writes a worknote; no worktree, no review loop beyond the architect reading the outcome.
-- **Blast radius.** Every fault, kill, pause, fill, corruption or reset goes through `FaultTargetGuard` (R-BLAST). A packet that adds a mutating tool adds it to `BlastRadiusTests` in the same commit, or the test fails.
+- **Blast radius.** Every fault, kill, pause, fill, corruption or reset goes through `FaultTargetGuard` (R-BLAST). A packet that adds a mutating tool adds it to `BlastRadiusTests` in the same commit, or the test fails. A Leased tool that execs in a member without a fault kind goes in `BlastRadiusTests.GuardedExecTools` with a guard-refusal test instead (D-ML167).
 - **Stop rule.** If an API named here does not exist with the given shape (MCP SDK, Tomlyn, Nodes internals), adapt the call site only, keep every contract type in this file unchanged, and list the difference in the report. If the contract itself cannot hold, return `blocked spec`.
 
 ## Repo rules (short form; each packet repeats the ones it needs)
@@ -3555,6 +3555,7 @@ $env:MERIDIAN_LAB_WINDOWS_CONTAINERS = '1'; dotnet test <W>\tests\Dhadgar.Lab.Te
 
 - **Branch / worktree / commit:** `ml/l32-agent-in-member` / `ml-l32` / `feat(lab): install and drive the windows agent inside pool members`
 - **Depends on:** L31, L12. **Security review:** yes (agent install, enrollment token).
+- **Blast radius (D-ML167):** the agent tools are Leased with `member` and are not faults. Add each to `BlastRadiusTests.GuardedExecTools` with its guard test, or promote the list to a marker interface. Reword `ResolveMemberForExecAsync`'s cli-specific refusal ("cli_run runs only on a pool member") if reused.
 - **Rules:**
   - R-REG: area Agents.
   - R-ARGS: `docker exec <id> sc.exe create <AgentWindowsFootprint.ServiceName> binPath= <path> start= demand` as separate `ArgumentList` items; never a command line built as one string.
@@ -3685,7 +3686,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 2. `Ui/Flows/*.cs`: the four C14 flows; `login_email` signs up and in through `http_request via=gateway` (vault password), parses `Set-Cookie` for BetterAuth's session cookie name, adds it with `Domain = "localhost"`, `Path = "/"`, `Secure = true`, `HttpOnly = true`, `SameSite = None`, then opens `/callback`. `refresh` records `refresh_path` (`panel` or `direct`).
 3. `Tools/Ui/UiTools.cs`; clause source: `ui_flow_run` is a step tool, and `step` clauses read `UiFlowResult`.
 4. `docs/guides/uat-specs/panel.toml` (section `panel`, `requires = ["docker", "network"]`): rows `login`, `refresh-rotates`, `refresh-replay-refused` (DV-3), `logout-clears`, `dashboard-guard`.
-5. S-L9 (as written in L34, `Seams/PanelLoginSeamTests.cs`) goes green unchanged. Tests: `UiStorageTests` (hash prefix only), `RouteGuardTests` (an external URL is aborted), `FlowDockerTests` (`RequiresDocker`, `RequiresNetwork`). `LabDb` masks the values (keeps column names) of `session.token`, `account.accessToken`, `account.refreshToken`, `account.idToken`, `account.password`, `verification.value` and Identity's refresh-token hash column; test `DbQuery_TokenColumns_Masked` (KG-W7-1).
+5. S-L9 (as written in L34, `Seams/PanelLoginSeamTests.cs`) goes green unchanged. Tests: `UiStorageTests` (hash prefix only), `RouteGuardTests` (an external URL is aborted), `FlowDockerTests` (`RequiresDocker`, `RequiresNetwork`). Masking is L35m (D-ML154, D-ML160).
 6. Identity's signing key across restarts (KG-W7-5): supply a per-stack `Auth__SigningKeyPem` from the vault (generated at `stack_up` like the exchange pair), or record the restart rows as expected re-login. State which.
 
 **Tests and why they fail when reverted:** S-L9 is the cross-component DV-3 test; `UiResult_NeverCarriesToken`.
@@ -3738,6 +3739,8 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 
 ### L37. CLI in a Linux member
 
+Amended by [l37 ruling 1](worknotes/l37-ruling-1.md) (D-ML162 to D-ML164) and its addendum 1 (D-ML167): dev client seeded and pinned, member config routes through the Gateway's `/api/v1` paths, per-subcommand allowlist, admin key per call, `cli_run` in `BlastRadiusTests.GuardedExecTools`. Merged `6e3b1082`; the live `cli.toml` run is owed (user's yes).
+
 - **Branch / worktree / commit:** `ml/l37-cli` / `ml-l37` / `feat(lab): run the cli inside a linux pool member`
 - **Depends on:** L30, L34. **Security review:** yes (CLI credentials).
 - **Rules:**
@@ -3771,7 +3774,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 
 - **Branch / worktree / commit:** `ml/l38-catalogs-auth` / `ml-l38` / `test(lab): expected-failure catalogs for auth, notifications, discord and cli`
 - **Depends on:** L35, L36, L37. **Security review:** yes (driver tool list).
-- **Rules:** as L23 (catalog rule, `ExpectationAssumed`, findings stay findings); D-ML18 forbidden set.
+- **Rules:** as L23 (catalog rule, `ExpectationAssumed`, findings stay findings); D-ML18 forbidden set. CLI rows inherit D-ML164 (assert on text, exit codes `required = false` for auth and nodes) and KG-W7-7.
 
 **Contract excerpt:** C12 known issues; C11 I2 violation `outbox-tables-missing` (D-ML148); C4 `http_request via=sink` reaches only `LabHosts.IsSinkEndpoint` (D-ML147), so any row that reads the sink uses that `via`.
 
@@ -3963,6 +3966,7 @@ dotnet test <W>\tests\Dhadgar.Lab.Tests\Dhadgar.Lab.Tests.csproj -c Release --fi
 
 - **Branch / worktree / commit:** `ml/l43-agent-specs` / `ml-l43` / `test(lab): sprint 2 agent flows as specs in windows members`
 - **Depends on:** L41, L33. **Security review:** yes (MSI, agent install).
+- **Blast radius (D-ML167):** `agent_msi_install` and `agent_msi_uninstall` are Leased with `member` and are not faults. Add each to `BlastRadiusTests.GuardedExecTools` with its guard test, or use the marker interface if L32 promoted the list. Reword `ResolveMemberForExecAsync`'s cli-specific refusal if reused.
 - **Rules:**
   - R-REG: area Agents.
   - C7 format; real table and column names from the merged Nodes model; SQL params bound; every row has a required non-human clause; catalog rule for failure rows.

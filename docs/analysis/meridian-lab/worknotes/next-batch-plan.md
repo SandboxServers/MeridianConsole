@@ -15,7 +15,7 @@ Architect plan, 2026-11-02. Read at campaign tip `143b5b02` (tip review 1 closed
 | L39 | W8 note (written today) | ~15k | no | yes (agent project) | `ml/l39-footprint` / `ml-l39` | work-packets L39 as amended by [W8 note](W8-sprint2-deltas.md) section 2 |
 | L35m | L34 merged (`a4a69e6a`) | ~22k | yes (`LabDbDockerTests`) | yes | `ml/l35m-dbquery-mask` / `ml-l35m` | section 7.3 here (D-ML154) |
 | L35 | L34 merged; L35m first (D-ML154) | ~40k (after the split) | yes, plus net (Playwright package, chromium) | yes | `ml/l35-playwright` / `ml-l35` | work-packets L35 minus the `LabDb` masking in file 5 |
-| L37 | L30 `cdc8c73b`, L34 `a4a69e6a` merged; after L54b (D-ML159) | ~35k | no (its checks); a live `cli.toml` run needs Docker | yes | `ml/l37-cli` / `ml-l37` | work-packets L37 |
+| L37 | L30 `cdc8c73b`, L34 `a4a69e6a` merged; after L54b (D-ML159) | ~35k | no (its checks); a live `cli.toml` run needs Docker | yes | `ml/l37-cli` / `ml-l37` | work-packets L37, amended by [l37 ruling 1](l37-ruling-1.md) (D-ML162 to D-ML164) and addendum 1 (D-ML167): dev client seeded and pinned, member config routes through the Gateway's `/api/v1` paths, per-subcommand allowlist, admin key per call |
 | L62 | L52, L29, L27 merged; sequenced after L27e, L29b and L52b (D-ML158) | ~40k | yes (the A/B run) | yes | `ml/l62-guided` / `ml-l62` | work-packets L62; not this batch |
 | L05b | wave5-fix-C merged | ~15k (estimate) | no | yes | `ml/l05b-lease-watch` / `ml-l05b` | outline only; architect specs it next |
 | L25g | wave5-fix-A merged | ~25k (estimate) | no | yes | `ml/l25g-row-evidence` / `ml-l25g` | outline only; architect specs it next |
@@ -72,6 +72,8 @@ Wave 6 onward stays blocked until the owner answers D-ML37/D-ML38 (section 3).
 | D-ML107 | nothing (KG-W5-1 stays open until it is ruled) | A separate product PR to `main` that returns 400 instead of 500 for malformed request bodies; no known issue. | "The fuzzer finds 500 errors for malformed request bodies. May I fix that in a separate product PR?" |
 | D-ML120 | nothing | No change: Nodes keeps failing fast without its database. | "Should Nodes start up and report not-ready when its database is down, instead of failing at startup? I recommend no change." |
 | D-ML138 | nothing (already carried out on option A) | Ratify. | "R10-1 and L27c landed before the confirmation run, as recommended. OK to record that as approved?" |
+
+**Owner answers (2026-11-02):** D-ML37/D-ML38 yes; D-ML133 yes (separate Nodes PR, outbox); D-ML107 yes (separate fuzz 500s PR); D-ML120 "start and report not-ready", against the recommendation above (a product change in the same Nodes PR as the outbox). D-ML138 is still ratify-by-action. The ledger is the README.
 
 ## 4. W8 note
 
@@ -295,6 +297,8 @@ git -C <W> status --porcelain   # only src/Tools/, tests/Dhadgar.Lab.Tests/ path
 **Docs owed:** file 12. The ledger closes KG-W5-19 for new bundles on merge. Gate MD is re-judged at the wave 10 gate run.
 
 ### 7.3 L35m: `db_query` masks token columns by base column
+
+Amended by [l35m ruling 1](l35m-ruling-1.md) (D-ML160, D-ML161): pass-through-type expression rule, name rule, Nodes entries, live-name step in `AuthStackDockerTests`.
 
 - **Branch / worktree / commit:** `ml/l35m-dbquery-mask` / `ml-l35m` / `fix(lab): mask token columns in db_query by base column`
 - **Security review:** yes. **Docker:** yes (the Docker test).
