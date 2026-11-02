@@ -1,3 +1,5 @@
+using System.Text.Json;
+using Dhadgar.Lab.Docker;
 using Dhadgar.Lab.Leasing;
 using Dhadgar.Lab.Pool;
 using Dhadgar.Shared.Results;
@@ -7,6 +9,7 @@ namespace Dhadgar.Lab.Tests.Pool;
 public sealed class PoolManagerTests
 {
     private static readonly PoolConstraints AnyLinux = new("linux", null, null, null, null, null, null);
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     private static LeaseHistoryEntry Ended() =>
         new("test", "pool", PoolHarness.Start, PoolHarness.Start, LeaseEndReason.Released, null, null);
@@ -210,5 +213,161 @@ public sealed class PoolManagerTests
         Assert.Equal(["lin-01", "lin-02"], second.Destroyed.Order());
         PoolListing listing = await restarted.Manager.ListAsync(CancellationToken.None);
         Assert.Empty(listing.Members);
+        Assert.Empty(JsonSerializer.Deserialize<List<PoolMember>>(File.ReadAllText(Path.Combine(restarted.Paths.State, "pool.json")), JsonOptions)!);
     }
+
+    [Fact]
+    public async Task Acquire_EmptyConstraints_NeverHandsOutTheHost()
+    {
+        var linux = new FakePoolProvider("linux-container", FakePoolProvider.LinuxContainer, available: false);
+        using var pool = new PoolHarness([linux, new HostProvider()]);
+
+        Result<IReadOnlyList<PoolMember>> open = await pool.Manager.AcquireAsync(new PoolConstraints(null, null, null, null, null, null, null), "test", "lease-1", CancellationToken.None);
+        Assert.True(open.IsFailure);
+        Assert.StartsWith("[Lab.Unavailable]", open.Error, StringComparison.Ordinal);
+
+        Result<IReadOnlyList<PoolMember>> host = await pool.Manager.AcquireAsync(new PoolConstraints(null, null, null, null, "host", null, null), "test", "lease-1", CancellationToken.None);
+        Assert.True(host.IsSuccess, host.Error);
+        Assert.Equal(["host"], host.Value.Select(m => m.MemberId));
+    }
+
+    [Fact]
+    public async Task LeaseEnd_ForgetsTheHostMember()
+    {
+        using var pool = new PoolHarness([new HostProvider()]);
+        Result<IReadOnlyList<PoolMember>> acquired = await pool.Manager.AcquireAsync(new PoolConstraints(null, null, null, null, "host", null, null), "test", "lease-1", CancellationToken.None);
+        Assert.True(acquired.IsSuccess, acquired.Error);
+
+        await pool.Manager.OnLeaseEndedAsync(Ended(), CancellationToken.None);
+
+        PoolListing listing = await pool.Manager.ListAsync(CancellationToken.None);
+        Assert.Empty(listing.Members);
+    }
+
+    [Fact]
+    public async Task Reset_FailsAndTheContainerIsGone_ReleaseStillForgetsTheMember()
+    {
+        var linux = new FakePoolProvider("linux-container", FakePoolProvider.LinuxContainer) { FailReset = true };
+        var inspector = new FlakyInspector();
+        using var pool = new PoolHarness([linux], inspector: inspector);
+        _ = await pool.Manager.AcquireAsync(AnyLinux, "test", "lease-1", CancellationToken.None);
+
+        Result<PoolMember> reset = await pool.Manager.ResetAsync("lin-01", CancellationToken.None);
+        Assert.True(reset.IsFailure);
+        inspector.Gone = true;
+
+        Result released = await pool.Manager.ReleaseAsync("lin-01", CancellationToken.None);
+
+        Assert.True(released.IsSuccess, released.Error);
+        Assert.Empty(linux.Destroyed);
+        PoolListing listing = await pool.Manager.ListAsync(CancellationToken.None);
+        Assert.Empty(listing.Members);
+    }
+
+    [Fact]
+    public async Task Acquire_FailedRunThenRetry_ReusesTheMemberId()
+    {
+        var linux = new FakePoolProvider("linux-container", FakePoolProvider.LinuxContainer) { FailProvision = true };
+        using var pool = new PoolHarness([linux]);
+
+        Result<IReadOnlyList<PoolMember>> failed = await pool.Manager.AcquireAsync(AnyLinux, "test", "lease-1", CancellationToken.None);
+        Assert.True(failed.IsFailure);
+        PoolListing afterFailure = await pool.Manager.ListAsync(CancellationToken.None);
+        Assert.Empty(afterFailure.Members);
+
+        linux.FailProvision = false;
+        Result<IReadOnlyList<PoolMember>> retried = await pool.Manager.AcquireAsync(AnyLinux, "test", "lease-1", CancellationToken.None);
+
+        Assert.True(retried.IsSuccess, retried.Error);
+        Assert.Equal(["lin-01"], retried.Value.Select(m => m.MemberId));
+    }
+
+    [Fact]
+    public async Task Acquire_CancelledMidProvision_LeavesNoMembers()
+    {
+        var linux = new FakePoolProvider("linux-container", FakePoolProvider.LinuxContainer) { CancelProvision = true };
+        using var pool = new PoolHarness([linux]);
+
+        _ = await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            pool.Manager.AcquireAsync(AnyLinux with { Count = 2 }, "test", "lease-1", CancellationToken.None));
+
+        PoolListing listing = await pool.Manager.ListAsync(CancellationToken.None);
+        Assert.Empty(listing.Members);
+    }
+
+    [Fact]
+    public async Task Acquire_CrashMidProvision_StartDestroysTheListedMembers()
+    {
+        var first = new FakePoolProvider("linux-container", FakePoolProvider.LinuxContainer) { CrashFrom = 2 };
+        using var pool = new PoolHarness([first]);
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            pool.Manager.AcquireAsync(AnyLinux with { Count = 2 }, "test", "lease-1", CancellationToken.None));
+
+        // The second daemon finds the first member and the one that was being provisioned, both listed before their runs.
+        var second = new FakePoolProvider("linux-container", FakePoolProvider.LinuxContainer);
+        using var restarted = new PoolHarness([second], root: pool.Root);
+        await restarted.Manager.StartAsync(CancellationToken.None);
+
+        Assert.Equal(["lin-01", "lin-02"], second.Destroyed.Order());
+    }
+
+    [Fact]
+    public async Task Start_KeepsAnUnreadablePoolJsonAside()
+    {
+        using var pool = new PoolHarness([new FakePoolProvider("linux-container", FakePoolProvider.LinuxContainer)]);
+        _ = Directory.CreateDirectory(pool.Paths.State);
+        string file = Path.Combine(pool.Paths.State, "pool.json");
+        File.WriteAllText(file, "{ not json");
+
+        await pool.Manager.StartAsync(CancellationToken.None);
+
+        Assert.Equal("{ not json", File.ReadAllText(file + ".bad"));
+    }
+
+    [Fact]
+    public async Task Start_KeepsAListedEntryWhoseContainerNameDoesNotFollowFromItsId()
+    {
+        var first = new FakePoolProvider("linux-container", FakePoolProvider.LinuxContainer);
+        using var pool = new PoolHarness([first]);
+        _ = await pool.Manager.AcquireAsync(AnyLinux, "test", "lease-1", CancellationToken.None);
+        string file = Path.Combine(pool.Paths.State, "pool.json");
+        File.WriteAllText(file, File.ReadAllText(file).Replace("meridian-lab-m-lin-01", "meridian-lab-m-lin-02", StringComparison.Ordinal));
+
+        var second = new FakePoolProvider("linux-container", FakePoolProvider.LinuxContainer);
+        using var restarted = new PoolHarness([second], root: pool.Root);
+        await restarted.Manager.StartAsync(CancellationToken.None);
+
+        Assert.Empty(second.Destroyed);
+        Assert.True(File.Exists(file));
+    }
+
+    [Fact]
+    public async Task Start_RemovesAStrayLabelledMemberContainer_ThroughTheGuard()
+    {
+        var docker = new FakeDockerCli { Listing = "meridian-lab-m-lin-09\nother-container\n" };
+        using var pool = new PoolHarness([new FakePoolProvider("linux-container", FakePoolProvider.LinuxContainer)], docker: docker);
+
+        await pool.Manager.StartAsync(CancellationToken.None);
+
+        Assert.Single(docker.Calls, c => c[0] == "rm");
+        Assert.Contains(docker.Calls, c => c.SequenceEqual(["rm", "-f", "meridian-lab-m-lin-09"]));
+        Assert.Empty(pool.Registry.All);
+    }
+}
+
+/// <summary>
+/// Answers like a lab member until <see cref="Gone"/> is set, then answers the way a removed container does.
+/// </summary>
+internal sealed class FlakyInspector : IDockerInspector
+{
+    private readonly LabMemberInspector _inner = new();
+
+    public bool Gone { get; set; }
+
+    public string LabContext => "lab-ctx";
+
+    public Task<Result<ContainerInspection>> InspectAsync(string containerId, CancellationToken ct) =>
+        Gone
+            ? Task.FromResult(Result<ContainerInspection>.Failure("[Lab.BlastRadius] container could not be inspected"))
+            : _inner.InspectAsync(containerId, ct);
 }

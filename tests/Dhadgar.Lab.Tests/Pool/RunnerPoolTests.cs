@@ -110,6 +110,20 @@ public sealed class RunnerPoolTests : IDisposable
     }
 
     [Fact]
+    public async Task Runner_ReleasesMemberWhenRowBlocks()
+    {
+        // The second row's reset fails, so the row blocks; the section still releases the member in its finally.
+        _linux.FailReset = true;
+        string second = RowA.Replace("\"a\"", "\"b\"", StringComparison.Ordinal);
+
+        UatRunResult run = await RunAsync(Header + RowA + second);
+
+        Assert.Equal(RowGrade.Pass, run.Rows[0].Grade);
+        Assert.Equal(RowGrade.Blocked, run.Rows[1].Grade);
+        Assert.Equal(["lin-01"], _linux.Destroyed);
+    }
+
+    [Fact]
     public async Task PoolFailure_SkipsEveryRowWithThePoolError()
     {
         _linux.Available = false;

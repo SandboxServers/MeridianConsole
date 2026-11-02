@@ -44,6 +44,7 @@ public sealed class PoolManager : ILeaseEndHook, ILabStatusSource, IHostedServic
     private readonly IReadOnlyList<IPoolProvider> _providers;
     private readonly ILabTargetRegistry _registry;
     private readonly FaultTargetGuard _guard;
+    private readonly IDockerCli _docker;
     private readonly string _stateFile;
     private readonly int _windowsLimit;
     private readonly TimeProvider _time;
@@ -57,6 +58,7 @@ public sealed class PoolManager : ILeaseEndHook, ILabStatusSource, IHostedServic
         IEnumerable<IPoolProvider> providers,
         ILabTargetRegistry registry,
         FaultTargetGuard guard,
+        IDockerCli docker,
         IConfiguration configuration,
         TimeProvider time,
         ILogger<PoolManager> logger)
@@ -67,6 +69,7 @@ public sealed class PoolManager : ILeaseEndHook, ILabStatusSource, IHostedServic
         _providers = providers.ToArray();
         _registry = registry ?? throw new ArgumentNullException(nameof(registry));
         _guard = guard ?? throw new ArgumentNullException(nameof(guard));
+        _docker = docker ?? throw new ArgumentNullException(nameof(docker));
         _time = time ?? throw new ArgumentNullException(nameof(time));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _stateFile = Path.Combine(paths.State, StateFileName);
@@ -380,6 +383,8 @@ public sealed class PoolManager : ILeaseEndHook, ILabStatusSource, IHostedServic
             }
         }
 
+        await SweepStrayContainersAsync(listed, cancellationToken).ConfigureAwait(false);
+
         lock (_state)
         {
             _members.Clear();
@@ -509,6 +514,47 @@ public sealed class PoolManager : ILeaseEndHook, ILabStatusSource, IHostedServic
         {
             _members.RemoveAll(m => m.MemberId == memberId);
             _leaseOf.Remove(memberId);
+        }
+    }
+
+    /// <summary>
+    /// Removes labelled lab containers that <c>pool.json</c> does not list, such as one left by a crash between its first run and
+    /// the save (N2b). Only member-prefixed names are considered, and each goes through the guard before it is removed.
+    /// </summary>
+    private async Task SweepStrayContainersAsync(IReadOnlyList<PoolMember> listed, CancellationToken ct)
+    {
+        Result<DockerOutput> listing = await _docker.RunAsync(
+            DockerEngine.Linux,
+            ["ps", "-a", "--filter", "label=meridian-lab=1", "--format", "{{.Names}}"],
+            ct).ConfigureAwait(false);
+        if (listing.IsFailure || listing.Value.ExitCode != 0)
+        {
+            _logger.LogWarning("lab.pool stray container sweep could not list containers");
+            return;
+        }
+
+        foreach (string name in listing.Value.StdOut.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (!name.StartsWith(ContainerNamePrefix, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            string memberId = name[ContainerNamePrefix.Length..];
+            if (!IsSafeMemberId(memberId) || listed.Any(m => m.MemberId == memberId))
+            {
+                continue;
+            }
+
+            string targetId = MemberTargetPrefix + memberId;
+            _ = _registry.Register(targetId, LabTargetKind.Member, memberId, name);
+            Result<ResolvedTarget> resolved = await _guard.ResolveAsync(targetId, "reset", ct).ConfigureAwait(false);
+            if (resolved.IsSuccess)
+            {
+                _ = await _docker.RunAsync(DockerEngine.Linux, ["rm", "-f", ContainerNamePrefix + memberId], ct).ConfigureAwait(false);
+            }
+
+            _registry.Remove(targetId);
         }
     }
 

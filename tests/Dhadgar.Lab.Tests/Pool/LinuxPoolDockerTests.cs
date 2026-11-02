@@ -37,7 +37,7 @@ public sealed class LinuxPoolDockerTests
             var registry = new LabTargetRegistry(LabPaths.FromRoot(root), docker, TimeProvider.System);
             var guard = new FaultTargetGuard(registry, new DockerInspector(docker, options), new Tripwire());
             var provider = new LinuxContainerProvider(docker, config);
-            var manager = new PoolManager(LabPaths.FromRoot(root), [provider], registry, guard, config, new FakeTimeProvider(), NullLogger<PoolManager>.Instance);
+            var manager = new PoolManager(LabPaths.FromRoot(root), [provider], registry, guard, docker, config, new FakeTimeProvider(), NullLogger<PoolManager>.Instance);
 
             Result<IReadOnlyList<PoolMember>> acquired = await manager.AcquireAsync(
                 new PoolConstraints("linux", null, null, null, "container", null, null), "docker test", "lease-docker", CancellationToken.None);
