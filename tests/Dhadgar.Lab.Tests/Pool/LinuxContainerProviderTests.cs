@@ -92,6 +92,49 @@ public sealed class LinuxContainerProviderTests
         Assert.Contains(docker.Calls, args => args.SequenceEqual(new[] { "rm", "-f", ContainerName }));
     }
 
+    [Fact]
+    public async Task Provision_NetworkMissing_CreatesTheLabelledLabNetworkBeforeTheRun()
+    {
+        var docker = new ScriptedDockerCli { NetworkInspectExit = 1 };
+        var provider = new LinuxContainerProvider(docker, ConfigWithImage(null));
+
+        Result<PoolMember> provisioned = await provider.ProvisionAsync(AnyConstraints, MemberId, CancellationToken.None);
+
+        Assert.True(provisioned.IsSuccess, provisioned.Error);
+        int create = docker.Calls.FindIndex(args => args.SequenceEqual(new[] { "network", "create", "--label", "meridian-lab=1", "meridian-lab-net" }));
+        int run = docker.Calls.FindIndex(args => args[0] == "run");
+        Assert.True(create >= 0);
+        Assert.True(create < run);
+        string[] runArgs = docker.Calls[run];
+        int network = Array.IndexOf(runArgs, "--network");
+        Assert.True(network >= 0);
+        Assert.Equal("meridian-lab-net", runArgs[network + 1]);
+    }
+
+    [Fact]
+    public async Task Provision_NetworkPresent_DoesNotCreateIt()
+    {
+        var docker = new ScriptedDockerCli();
+        var provider = new LinuxContainerProvider(docker, ConfigWithImage(null));
+
+        _ = await provider.ProvisionAsync(AnyConstraints, MemberId, CancellationToken.None);
+
+        Assert.DoesNotContain(docker.Calls, args => args.Length > 1 && args[0] == "network" && args[1] == "create");
+    }
+
+    [Fact]
+    public async Task Provision_NetworkCannotBeCreated_FailsWithoutRunning()
+    {
+        var docker = new ScriptedDockerCli { NetworkInspectExit = 1, NetworkCreateExit = 1 };
+        var provider = new LinuxContainerProvider(docker, ConfigWithImage(null));
+
+        Result<PoolMember> provisioned = await provider.ProvisionAsync(AnyConstraints, MemberId, CancellationToken.None);
+
+        Assert.True(provisioned.IsFailure);
+        Assert.Contains("[Lab.Docker] could not create the lab network", provisioned.Error);
+        Assert.DoesNotContain(docker.Calls, args => args[0] == "run");
+    }
+
     private static PoolConstraints AnyConstraints { get; } = new(null, null, null, null, null, null, null);
 
     private static IConfiguration ConfigWithImage(string? image)
@@ -117,6 +160,10 @@ public sealed class LinuxContainerProviderTests
 
         public string InspectOutput { get; set; } = string.Empty;
 
+        public int NetworkInspectExit { get; set; }
+
+        public int NetworkCreateExit { get; set; }
+
         public List<string[]> Calls { get; } = [];
 
         public Task<Result<DockerOutput>> RunAsync(DockerEngine engine, IReadOnlyList<string> args, CancellationToken ct)
@@ -131,6 +178,8 @@ public sealed class LinuxContainerProviderTests
             {
                 "run" => new DockerOutput(RunExit, string.Empty, RunExit == 0 ? string.Empty : "docker run failed"),
                 "inspect" => new DockerOutput(0, InspectOutput, string.Empty),
+                "network" when args[1] == "inspect" => new DockerOutput(NetworkInspectExit, string.Empty, string.Empty),
+                "network" when args[1] == "create" => new DockerOutput(NetworkCreateExit, string.Empty, string.Empty),
                 _ => new DockerOutput(0, string.Empty, string.Empty),
             };
             return Task.FromResult(Result<DockerOutput>.Success(output));
