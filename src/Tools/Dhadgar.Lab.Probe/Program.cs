@@ -29,6 +29,9 @@ public static class ProbeCli
             case "footprint":
                 return Footprint(args, stdout, stderr);
 
+            case "sink":
+                return args.Length == 1 ? SinkHost.Run(stderr) : Usage(stderr, "usage: meridian-lab-probe sink");
+
             default:
                 stderr.WriteLine("unknown mode");
                 return 2;
@@ -57,6 +60,12 @@ public static class ProbeCli
 
         stdout.WriteLine(JsonSerializer.Serialize(footprint, FootprintJson));
         return 0;
+    }
+
+    private static int Usage(TextWriter stderr, string message)
+    {
+        stderr.WriteLine(message);
+        return 2;
     }
 
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]

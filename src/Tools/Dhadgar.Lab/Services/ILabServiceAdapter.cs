@@ -1,3 +1,4 @@
+using System.Text;
 using Dhadgar.Shared.Results;
 
 namespace Dhadgar.Lab.Services;
@@ -14,6 +15,7 @@ namespace Dhadgar.Lab.Services;
 /// <param name="ExchangePublicKeyPem">Identity's exchange public key PEM (Identity only); null when no stack key exists.</param>
 /// <param name="ExchangePrivateKeyPem">BetterAuth's exchange private key PEM (BetterAuth only); never logged.</param>
 /// <param name="BetterAuthSecret">BetterAuth's <c>BETTER_AUTH_SECRET</c> (BetterAuth only); never logged.</param>
+/// <param name="AdminApiKey">Admin API key for services that authenticate admin routes (L36); from the vault, never logged. Null when the service has none.</param>
 public sealed record LabServiceContext(
     string BuildId,
     IReadOnlyDictionary<string, string> ConnectionStrings,
@@ -22,12 +24,24 @@ public sealed record LabServiceContext(
     string RabbitMqPassword,
     string? ExchangePublicKeyPem = null,
     string? ExchangePrivateKeyPem = null,
-    string? BetterAuthSecret = null)
+    string? BetterAuthSecret = null,
+    string? AdminApiKey = null)
 {
-    // ToString prints only the build id: the context carries the exchange private key, the BetterAuth secret and the RabbitMQ password.
-    private bool PrintMembers(System.Text.StringBuilder builder)
+    /// <summary>
+    /// Prints the build, the connection-string keys (never their values) and the non-secret fields. The passwords, the
+    /// exchange private key, the BetterAuth secret and the admin key print as <c>[redacted]</c>, so <c>ToString()</c> and a failed assert never show them.
+    /// </summary>
+    private bool PrintMembers(StringBuilder builder)
     {
-        builder.Append("BuildId = ").Append(BuildId);
+        builder.Append("BuildId = ").Append(BuildId)
+            .Append(", ConnectionStrings = [").Append(string.Join(", ", ConnectionStrings.Keys)).Append(']')
+            .Append(", CaStateDirectory = ").Append(CaStateDirectory)
+            .Append(", RabbitMqUsername = ").Append(RabbitMqUsername)
+            .Append(", RabbitMqPassword = [redacted]")
+            .Append(", AdminApiKey = [redacted]")
+            .Append(", ExchangePublicKeyPem = ").Append(ExchangePublicKeyPem is null ? "null" : "[present]")
+            .Append(", ExchangePrivateKeyPem = [redacted]")
+            .Append(", BetterAuthSecret = [redacted]");
         return true;
     }
 }
@@ -54,6 +68,9 @@ public interface ILabServiceAdapter
 
     /// <summary>Path polled on the loopback host port until it answers 200.</summary>
     string HealthPath { get; }
+
+    /// <summary>Status that means the process is up and answering. Most services answer 200; a service may name another.</summary>
+    System.Net.HttpStatusCode ReadyStatusCode => System.Net.HttpStatusCode.OK;
 
     /// <summary>Config keys the overlay may set for this service (C4 allowlist).</summary>
     IReadOnlySet<string> OverlayKeys { get; }

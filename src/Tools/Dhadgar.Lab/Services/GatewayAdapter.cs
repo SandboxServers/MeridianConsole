@@ -23,6 +23,12 @@ public sealed class GatewayAdapter : ILabServiceAdapter
     /// <summary>Gateway to BetterAuth proxy port (C10 <c>gateway-betterauth</c>).</summary>
     public const int GatewayBetterAuthProxyPort = 20013;
 
+    /// <summary>Gateway to Notifications proxy port (C10 <c>gateway-notifications</c>, L36).</summary>
+    public const int GatewayNotificationsProxyPort = 20014;
+
+    /// <summary>Gateway to Discord proxy port (C10 <c>gateway-discord</c>, L36).</summary>
+    public const int GatewayDiscordProxyPort = 20015;
+
     /// <inheritdoc />
     public string Name => "gateway";
 
@@ -36,7 +42,7 @@ public sealed class GatewayAdapter : ILabServiceAdapter
     public int HostPort => 15000;
 
     /// <inheritdoc />
-    public IReadOnlyList<string> Proxies { get; } = ["gateway-redis", "gateway-nodes", "gateway-identity", "gateway-betterauth"];
+    public IReadOnlyList<string> Proxies { get; } = ["gateway-redis", "gateway-nodes", "gateway-identity", "gateway-betterauth", "gateway-notifications", "gateway-discord"];
 
     /// <inheritdoc />
     public string HealthPath => "/healthz";
@@ -69,6 +75,8 @@ public sealed class GatewayAdapter : ILabServiceAdapter
             ["ReverseProxy__Clusters__nodes__Destinations__d1__Address"] = $"http://{ToxiproxyHost}:{GatewayNodesProxyPort}/",
             ["ReverseProxy__Clusters__identity__Destinations__d1__Address"] = $"http://{ToxiproxyHost}:{GatewayIdentityProxyPort}/",
             ["ReverseProxy__Clusters__betterauth__Destinations__d1__Address"] = $"http://{ToxiproxyHost}:{GatewayBetterAuthProxyPort}/",
+            ["ReverseProxy__Clusters__notifications__Destinations__d1__Address"] = $"http://{ToxiproxyHost}:{GatewayNotificationsProxyPort}/",
+            ["ReverseProxy__Clusters__discord__Destinations__d1__Address"] = $"http://{ToxiproxyHost}:{GatewayDiscordProxyPort}/",
             ["Redis__ConnectionString"] = redis,
             ["Cloudflare__EnableDynamicFetch"] = "false",
             ["Readyz__RequiredClusters__0"] = "nodes",

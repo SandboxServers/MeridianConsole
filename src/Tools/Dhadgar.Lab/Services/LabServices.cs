@@ -106,6 +106,17 @@ public sealed class LabServices
         return Result<ILabServiceAdapter>.Success(adapter);
     }
 
+    /// <summary>The adapter's readiness URL on the loopback host.</summary>
+    internal static Uri ReadinessUri(ILabServiceAdapter adapter) =>
+        new($"http://127.0.0.1:{adapter.HostPort}{adapter.HealthPath}", UriKind.Absolute);
+
+    /// <summary>True when the adapter's readiness URL is a lab service endpoint or the sink (D-ML147).</summary>
+    internal static bool IsReadinessEndpoint(ILabServiceAdapter adapter)
+    {
+        Uri uri = ReadinessUri(adapter);
+        return LabHosts.IsLabEndpoint(uri) || LabHosts.IsSinkEndpoint(uri);
+    }
+
     /// <summary>
     /// Starts a service from a build (the latest build when <paramref name="buildId"/> is null). Replaces a lab-owned
     /// container of the same name, registers <c>c:&lt;service&gt;</c>, follows its logs and waits for its health path.
@@ -116,6 +127,11 @@ public sealed class LabServices
         if (adapter.IsFailure)
         {
             return Result<LabServiceStartDto>.Failure(adapter.Error);
+        }
+
+        if (!IsReadinessEndpoint(adapter.Value!))
+        {
+            return Result<LabServiceStartDto>.Failure("[Lab.Untrusted] readiness URL is not a lab endpoint");
         }
 
         Result stack = await RequireStackUpAsync(ct).ConfigureAwait(false);
@@ -165,15 +181,8 @@ public sealed class LabServices
         string containerId;
         try
         {
-            var args = new List<string>
-            {
-                "run", "-d", "--name", containerName,
-                "--label", $"{LabDefaults.ContainerLabel}=1",
-                "--restart", "no",
-                "--network", LabDefaults.NetworkName,
-                "--tmpfs", "/tmp:rw,size=64m",
-                "-p", $"127.0.0.1:{target.HostPort}:{ContainerPort}",
-            };
+            var args = new List<string> { "run", "-d", "--name", containerName };
+            args.AddRange(RunOptions(target));
             if (target is NodesAdapter)
             {
                 args.Add("-v");
@@ -213,7 +222,7 @@ public sealed class LabServices
             return Result<LabServiceStartDto>.Failure(followed.Error);
         }
 
-        Result ready = await WaitReadyAsync(target, ct).ConfigureAwait(false);
+        Result ready = await WaitReadyAsync(target, _time, ct, _docker).ConfigureAwait(false);
         return ready.IsFailure
             ? Result<LabServiceStartDto>.Failure(ready.Error)
             : Result<LabServiceStartDto>.Success(new LabServiceStartDto(targetId, "up", image));
@@ -389,6 +398,29 @@ public sealed class LabServices
             betterAuthSecret = secret.Value;
         }
 
+        if (adapter.Name is "notifications" or "discord")
+        {
+            Result<string> db = _connections.ServiceDb(adapter.Name);
+            if (db.IsFailure)
+            {
+                return Result<IReadOnlyDictionary<string, string>>.Failure(db.Error);
+            }
+
+            connections[adapter.Name] = db.Value!;
+        }
+
+        string? adminKey = null;
+        if (adapter.Name is "notifications" or "discord")
+        {
+            Result<string> key = AdminApiKey(adapter.Name == "notifications" ? LabCredentialRefs.NotificationsAdmin : LabCredentialRefs.DiscordAdmin);
+            if (key.IsFailure)
+            {
+                return Result<IReadOnlyDictionary<string, string>>.Failure(key.Error);
+            }
+
+            adminKey = key.Value!;
+        }
+
         Result<string> password = RabbitMqPassword();
         if (password.IsFailure)
         {
@@ -409,7 +441,8 @@ public sealed class LabServices
             password.Value!,
             exchangePublic,
             exchangePrivate,
-            betterAuthSecret);
+            betterAuthSecret,
+            AdminApiKey: adminKey);
         Result<IReadOnlyDictionary<string, string>> composed = adapter.Environment(ctx);
         if (composed.IsFailure)
         {
@@ -428,6 +461,17 @@ public sealed class LabServices
         return Result<IReadOnlyDictionary<string, string>>.Success(env);
     }
 
+    private Result<string> AdminApiKey(string credential)
+    {
+        string? reference = _credentials.Get(credential);
+        if (reference is null)
+        {
+            return Result<string>.Failure("[Lab.NotFound] the stack has no admin keys; run stack_up first");
+        }
+
+        return _vault.Use(reference, value => value.ToString());
+    }
+
     private Result<string> RabbitMqPassword()
     {
         string? reference = _credentials.Get(LabCredentialRefs.RabbitMq);
@@ -439,20 +483,48 @@ public sealed class LabServices
         return _vault.Use(reference, value => value.ToString());
     }
 
-    private async Task<Result> WaitReadyAsync(ILabServiceAdapter adapter, CancellationToken ct)
+    /// <summary>
+    /// The <c>docker run</c> flags a lab service needs besides its name, env file and image. Every service is published on
+    /// loopback only; the sink (L36) also gets a 128 MiB memory cap.
+    /// </summary>
+    internal static IReadOnlyList<string> RunOptions(ILabServiceAdapter target)
     {
-        var uri = new Uri($"http://127.0.0.1:{adapter.HostPort}{adapter.HealthPath}", UriKind.Absolute);
-        if (!LabHosts.IsLabEndpoint(uri))
+        var options = new List<string>
         {
-            return Result.Failure("[Lab.Untrusted] readiness URL is not a lab endpoint");
+            "--label", $"{LabDefaults.ContainerLabel}=1",
+            "--restart", "no",
+            "--network", LabDefaults.NetworkName,
+            "--tmpfs", "/tmp:rw,size=64m",
+            "-p", $"127.0.0.1:{target.HostPort}:{ContainerPort}",
+        };
+        if (target is SinkLabAdapter)
+        {
+            options.Add("--memory");
+            options.Add("128m");
         }
 
+        return options;
+    }
+
+    /// <summary>
+    /// Polls the adapter's health path on its loopback port until it answers <see cref="ILabServiceAdapter.ReadyStatusCode"/>,
+    /// or fails with <c>[Lab.Timeout]</c> once <see cref="ReadinessTimeoutSeconds"/> have passed on <paramref name="time"/>.
+    /// <c>StartAsync</c> checks the URL with <c>IsReadinessEndpoint</c> before any docker call.
+    /// Internal so the tests can drive the wait with a fake listener and clock.
+    /// </summary>
+    internal static async Task<Result> WaitReadyAsync(
+        ILabServiceAdapter adapter,
+        TimeProvider time,
+        CancellationToken ct,
+        IDockerCli? docker = null)
+    {
+        var uri = new Uri($"http://127.0.0.1:{adapter.HostPort}{adapter.HealthPath}", UriKind.Absolute);
         using var handler = new SocketsHttpHandler { AllowAutoRedirect = false, UseProxy = false };
         using var http = new HttpClient(handler, disposeHandler: false)
         {
             Timeout = TimeSpan.FromSeconds(5),
         };
-        long started = _time.GetTimestamp();
+        long started = time.GetTimestamp();
         var deadline = TimeSpan.FromSeconds(ReadinessTimeoutSeconds);
         string lastStatus = "no answer";
         string failingChecks = string.Empty;
@@ -463,7 +535,7 @@ public sealed class LabServices
                 using var request = new HttpRequestMessage(HttpMethod.Get, uri);
                 request.Headers.Host = ProbeHostHeader;
                 using HttpResponseMessage response = await http.SendAsync(request, ct).ConfigureAwait(false);
-                if (response.StatusCode == HttpStatusCode.OK)
+                if (response.StatusCode == adapter.ReadyStatusCode)
                 {
                     return Result.Success();
                 }
@@ -482,10 +554,13 @@ public sealed class LabServices
                 lastStatus = "attempt timed out";
             }
 
-            if (_time.GetElapsedTime(started) >= deadline)
+            if (time.GetElapsedTime(started) >= deadline)
             {
-                string containerState = await ContainerStateAsync(adapter.Container, CancellationToken.None).ConfigureAwait(false);
-                return Result.Failure(ReadinessTimeoutMessage(adapter.Name, lastStatus, failingChecks, containerState));
+                string containerState = docker is null
+                    ? "unknown"
+                    : await ContainerStateAsync(docker, adapter.Container, CancellationToken.None).ConfigureAwait(false);
+                return Result.Failure(
+                    ReadinessTimeoutMessage(adapter.Name, lastStatus, failingChecks, containerState, (int)adapter.ReadyStatusCode));
             }
 
             await Task.Delay(TimeSpan.FromMilliseconds(500), ct).ConfigureAwait(false);
@@ -608,9 +683,9 @@ public sealed class LabServices
     /// Reads the container's <c>status exitcode</c> from <c>docker container inspect</c> for a readiness timeout. A Docker failure
     /// or an unexpected answer reads as <c>unknown</c> (see <see cref="ParseContainerState"/>).
     /// </summary>
-    private async Task<string> ContainerStateAsync(string containerName, CancellationToken ct)
+    private static async Task<string> ContainerStateAsync(IDockerCli docker, string containerName, CancellationToken ct)
     {
-        Result<DockerOutput> call = await _docker.RunAsync(
+        Result<DockerOutput> call = await docker.RunAsync(
             DockerEngine.Linux,
             ["container", "inspect", "--format", "{{.State.Status}} {{.State.ExitCode}}", containerName],
             ct).ConfigureAwait(false);
@@ -636,10 +711,10 @@ public sealed class LabServices
     /// The readiness timeout message. It names the service, the last probe status, the failing ServiceDefaults checks (names
     /// only) and the container state, so a timeout explains itself (D-ML151).
     /// </summary>
-    internal static string ReadinessTimeoutMessage(string name, string lastStatus, string failingChecks, string containerState)
+    internal static string ReadinessTimeoutMessage(string name, string lastStatus, string failingChecks, string containerState, int readyStatus = 200)
     {
         string checks = failingChecks.Length == 0 ? string.Empty : $"; failing checks: {failingChecks}";
-        return $"[Lab.Timeout] {name} did not answer 200 within {ReadinessTimeoutSeconds} s; "
+        return $"[Lab.Timeout] {name} did not answer {readyStatus} within {ReadinessTimeoutSeconds} s; "
             + $"last status {lastStatus}{checks}; container {containerState}";
     }
 

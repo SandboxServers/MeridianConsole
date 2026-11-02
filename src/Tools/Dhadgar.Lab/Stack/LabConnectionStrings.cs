@@ -31,6 +31,12 @@ public sealed class LabCredentialRefs
     /// <summary>The BetterAuth secret (<c>BETTER_AUTH_SECRET</c>).</summary>
     public const string BetterAuthSecret = "betterauth-secret";
 
+    /// <summary>The Notifications admin API key (L36); sent as <c>AdminApiKey</c> and never printed.</summary>
+    public const string NotificationsAdmin = "notifications-admin";
+
+    /// <summary>The Discord admin API key (L36); sent as <c>AdminApiKey</c> and never printed.</summary>
+    public const string DiscordAdmin = "discord-admin";
+
     private readonly Lock _gate = new();
     private readonly Dictionary<string, string> _refs = new(StringComparer.Ordinal);
 

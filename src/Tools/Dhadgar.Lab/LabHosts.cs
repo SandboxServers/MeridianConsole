@@ -48,6 +48,12 @@ public static class LabHosts
     }
 
     /// <summary>
+    /// True only for http, a loopback host, and <see cref="LabPorts.Sink"/>. The webhook sink is the one infra endpoint a lab
+    /// service's readiness check and <c>http_request via=sink</c> may reach (D-ML147); the other infra ports stay out.
+    /// </summary>
+    public static bool IsSinkEndpoint(Uri uri) => IsLabInfraEndpoint(uri) && uri.Port == LabPorts.Sink;
+
+    /// <summary>
     /// True only for http, a loopback host, and <see cref="LabDefaults.DaemonPort"/>. The CLI's loopback calls (<c>status</c>, <c>uat run</c>)
     /// and the self-check recovery's calls to its child daemon use this; <see cref="IsLabEndpoint"/> is unchanged.
     /// </summary>

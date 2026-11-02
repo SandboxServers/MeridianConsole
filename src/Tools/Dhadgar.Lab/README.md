@@ -56,10 +56,13 @@ The lab starts these services from the working tree, each behind Toxiproxy for i
 
 | Service | Port | Dependencies (proxy) | Health |
 |---|---|---|---|
-| Gateway | 15000 | Redis, Nodes, Identity, BetterAuth | `/healthz` |
+| Gateway | 15000 | Redis, Nodes, Identity, BetterAuth, Notifications, Discord, Sink | `/healthz` |
 | Nodes | 15040 | Postgres, RabbitMQ | `/healthz` |
 | Identity | 15010 | Postgres (`identity-postgres`), Redis (`identity-redis`), RabbitMQ (`identity-rabbitmq`) | `/healthz` |
 | BetterAuth | 15130 | Postgres (`betterauth-postgres`) | `/healthz` |
+| Notifications | 15090 | Postgres, RabbitMQ, webhook (`notifications-*`) | `/healthz` |
+| Discord | 15120 | Postgres, RabbitMQ, webhook (`discord-*`) | `/healthz` (503 asserted) |
+| Sink | 18090 | none | `/_sink/requests` |
 | Panel | 14321 | none | `/login` |
 
 `stack_up` generates a per-stack ES256 exchange key pair. BetterAuth signs exchange tokens with the private key; Identity verifies them with the public key (`state\identity\exchange-public.pem`). The private key and the BetterAuth secret live only in the vault and reach the container through an env file. BetterAuth and the Panel are Node apps built with `tools/lab/images/node-app.Dockerfile`. Staging skips env files, `.npmrc`/`.yarnrc*`, `.dev.vars`, `secrets.json`, key and certificate files, `node_modules`/`dist`/`bin`/`obj` and reparse points. `lab_build` without `projects` builds these images too, which needs the npm registry.
@@ -70,7 +73,11 @@ Identity runs with `ASPNETCORE_ENVIRONMENT=Development` (auto-migrate), `Auth:Us
 
 `db_query service=betterauth` or `service=identity` returns session, account-token, verification and refresh-token columns unmasked (lab users, per-stack secrets). Masking is KG-W7-1 (L35).
 
-Identity has no outbox tables, so the I2 outbox invariant covers Nodes only.
+I2 checks the Nodes and Notifications outboxes; Identity has none.
+
+- **Notifications** (`meridian-lab-notifications`, 15090): built from `src/Dhadgar.Notifications`. Postgres, RabbitMQ and its webhook go through the `notifications-postgres` (20050), `notifications-rabbitmq` (20051) and `notifications-webhook` (20052) proxies. Its admin key comes from the vault. Its EF outbox is checked by I2. Its migrations create no outbox tables (F25), so I2 reports `outbox-tables-missing`, matched to `KI-NOTIF-OUTBOX` (D-ML148). Email is not switched to SMTP (D-ML40 not ruled), so email rows assert the designed failure.
+- **Discord** (`meridian-lab-discord`, 15120): built from `src/Dhadgar.Discord`. Postgres and RabbitMQ go through `discord-postgres` (20060) and `discord-rabbitmq` (20062). The webhook goes through `discord-webhook` (20061). The bot stays absent (D-ML41), so `/healthz` 503 is the asserted state (F26). `SecretsService__Url` is unset, so the `:5080` fallback is visible (KI-DISCORD-SECRETS-PORT).
+- **Sink** (`meridian-lab-sink`, 18090): started by `svc_start sink` from the probe image (`meridian-lab/probe:<build_id>`), published on `127.0.0.1:18090` only, with a 128 MiB memory cap. `http_request via=sink` reads it (D-ML147). The probe image in `tools/lab/images/probe.Dockerfile` runs `Dhadgar.Lab.Probe sink`. It records requests in memory (last 500), drops `Authorization`, redacts credentials, and serves `GET /_sink/requests?since=` and `DELETE /_sink/requests`.
 
 ## Daemon edge
 

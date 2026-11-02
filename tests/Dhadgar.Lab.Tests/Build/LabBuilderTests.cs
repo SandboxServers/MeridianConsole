@@ -102,6 +102,14 @@ public sealed class LabBuilderTests
     }
 
     [Fact]
+    public void DockerfileFor_Probe_IsProbeDockerfile_AndGatewayIsDotnetService()
+    {
+        Assert.Equal("probe.Dockerfile", LabBuilder.DockerfileFor("probe"));
+        Assert.Equal("dotnet-service.Dockerfile", LabBuilder.DockerfileFor("gateway"));
+        Assert.Equal("dotnet-service.Dockerfile", LabBuilder.DockerfileFor("notifications"));
+    }
+
+    [Fact]
     public void IsLockDrift_DetectsNu1004()
     {
         Assert.True(LabBuilder.IsLockDrift("error NU1004: The locked file is out of date"));

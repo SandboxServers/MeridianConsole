@@ -48,7 +48,7 @@ public static partial class LabMcpServer
             name => sp.GetRequiredService<LabProcessSupervisor>().RingFor(name),
             sp.GetRequiredService<IFaultHistory>()));
         services.AddSingleton<IInvariant>(sp => new I2OutboxInvariant(
-            I2OutboxInvariant.NodesTargets,
+            I2OutboxInvariant.AllTargets,
             InvariantWiring.SqlQuery(sp.GetRequiredService<LabDb>()),
             sp.GetRequiredService<Redactor>(),
             InvariantWiring.DbGate(sp.GetRequiredService<LabDb>(), sp.GetRequiredService<LabCredentialRefs>())));

@@ -24,18 +24,35 @@ public sealed record OutboxTarget(
 
 /// <summary>
 /// I2: the outbox drains (C11). A message row older than 60 s, or a state row not delivered after 60 s, is a violation.
-/// The Nodes target is the only one here; L34 and L36 add the others.
+/// The Nodes and Notifications targets are here; L34 adds the others.
 /// </summary>
 public sealed class I2OutboxInvariant : ISkippableInvariant
 {
     private const int EvidenceRows = 5;
     private const int MaxDetailLength = 512;
 
+    /// <summary>The check id of a missing outbox table on a migrated database (D-ML148, KI-NOTIF-OUTBOX).</summary>
+    public const string TablesMissingCheckId = "outbox-tables-missing";
+
+    private const string UndefinedTable = "42P01";
+
     /// <summary>The Nodes outbox: MassTransit tables <c>OutboxMessage</c> (aged by <c>EnqueueTime</c>) and <c>OutboxState</c> (aged by <c>Created</c>, delivered by <c>Delivered</c>).</summary>
     public static IReadOnlyList<OutboxTarget> NodesTargets { get; } =
     [
         new OutboxTarget("nodes", "nodes", "OutboxMessage", "EnqueueTime", "OutboxState", "Created", "Delivered"),
     ];
+
+    /// <summary>
+    /// The Notifications outbox (L36): the EF outbox MassTransit uses in <c>notifications</c>. Its migrations do not create the
+    /// tables (F25), so on a migrated database each check reports violation <c>outbox-tables-missing</c> (D-ML148, KI-NOTIF-OUTBOX).
+    /// </summary>
+    public static IReadOnlyList<OutboxTarget> NotificationsTargets { get; } =
+    [
+        new OutboxTarget("notifications", "notifications", "OutboxMessage", "EnqueueTime", "OutboxState", "Created", "Delivered"),
+    ];
+
+    /// <summary>Every outbox the lab checks: Nodes and Notifications (Discord has no EF outbox).</summary>
+    public static IReadOnlyList<OutboxTarget> AllTargets { get; } = [.. NodesTargets, .. NotificationsTargets];
 
     private readonly IReadOnlyList<OutboxTarget> _targets;
     private readonly InvariantSqlQuery _query;
@@ -79,6 +96,7 @@ public sealed class I2OutboxInvariant : ISkippableInvariant
         var violations = new List<InvariantViolation>();
         var skipped = new List<InvariantSkip>();
         var gated = new Dictionary<string, DbApplicability>(StringComparer.Ordinal);
+        string? failure = null;
 
         foreach (OutboxTarget target in _targets)
         {
@@ -122,7 +140,22 @@ public sealed class I2OutboxInvariant : ISkippableInvariant
                 Result<DbQueryResult> query = await _query(target.Database, probe.Sql, ct).ConfigureAwait(false);
                 if (query.IsFailure)
                 {
-                    return Result<InvariantOutcome>.Failure($"{target.Service} {probe.CheckId}: {query.Error}");
+                    if (_gate is not null && string.Equals(query.Error, LabDb.RejectedStatementError(UndefinedTable), StringComparison.Ordinal))
+                    {
+                        // The gate said migrated, yet the outbox table is absent: a product defect, matched to KI-NOTIF-OUTBOX (D-ML148).
+                        violations.Add(new InvariantViolation(
+                            Id,
+                            target.Service,
+                            TablesMissingCheckId,
+                            $"{probe.Table}: table does not exist (SQLSTATE {UndefinedTable})",
+                            window.To,
+                            _redactor.Redact(JsonSerializer.SerializeToElement(new { table = probe.Table, sqlstate = UndefinedTable }))));
+                        break;
+                    }
+
+                    // Keep checking the other targets; the failure is returned after the violations found so far (KG-W7-3).
+                    failure ??= $"{target.Service} {probe.CheckId}: {query.Error}";
+                    break;
                 }
 
                 if (query.Value.RowCount == 0)
@@ -145,6 +178,11 @@ public sealed class I2OutboxInvariant : ISkippableInvariant
                     window.To,
                     evidence));
             }
+        }
+
+        if (failure is not null && violations.Count == 0)
+        {
+            return Result<InvariantOutcome>.Failure(failure);
         }
 
         return Result<InvariantOutcome>.Success(new InvariantOutcome(violations, skipped));

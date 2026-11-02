@@ -31,7 +31,7 @@ public sealed class ServiceStartTool : LabTool<ServiceStartArgs>
     public override string Name => "svc_start";
 
     /// <inheritdoc />
-    public override string Description => "Start a lab service (gateway, nodes) from a build; refused unless the stack is up.";
+    public override string Description => "Start a lab service (gateway, nodes, notifications, discord, sink) from a build; refused unless the stack is up.";
 
     /// <inheritdoc />
     protected override async Task<Result<object>> ExecuteAsync(ServiceStartArgs args, LabCallContext context, CancellationToken ct)

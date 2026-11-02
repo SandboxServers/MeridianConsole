@@ -15,6 +15,18 @@ public sealed class LabHostsTests
         Assert.Equal(expected, LabHosts.IsLabEndpoint(new Uri(endpoint)));
     }
 
+    [Theory]
+    [InlineData("http://127.0.0.1:18090/", true)]
+    [InlineData("http://localhost:18090/", true)]
+    [InlineData("https://127.0.0.1:18090/", false)]
+    [InlineData("http://10.0.0.5:18090/", false)]
+    [InlineData("http://127.0.0.1:18474/", false)]
+    [InlineData("http://127.0.0.1:15040/", false)]
+    public void IsSinkEndpoint_KnownCases_MatchesExpectation(string endpoint, bool expected)
+    {
+        Assert.Equal(expected, LabHosts.IsSinkEndpoint(new Uri(endpoint)));
+    }
+
     [Fact]
     public void IsLabEndpoint_RelativeUri_ReturnsFalseWithoutThrowing()
     {

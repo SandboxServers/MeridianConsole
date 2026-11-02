@@ -11,6 +11,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\Shared\Dhadgar.Contracts\Dhadgar.Contracts.csproj" />
   </ItemGroup>
 </Project>

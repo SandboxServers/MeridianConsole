@@ -41,4 +41,25 @@ public sealed class ObservationPathTests
         Assert.True(uri.IsSuccess, uri.Error);
         Assert.Equal(LabPorts.Nodes, uri.Value!.Port);
     }
+
+    [Fact]
+    public void HttpDirect_ToSink_ResolvesToLoopbackSinkPort()
+    {
+        Result<Uri> uri = LabHttp.Compose("sink", "/_sink/requests");
+
+        Assert.True(uri.IsSuccess, uri.Error);
+        Assert.Equal(LabPorts.Sink, uri.Value!.Port);
+        Assert.Equal("127.0.0.1", uri.Value!.Host);
+    }
+
+    [Fact]
+    public void HttpDirect_ToSink_SchemeRelativePath_IsRefused()
+    {
+        Result<Uri> uri = LabHttp.Compose("sink", "//evil.example/x");
+
+        Assert.True(uri.IsFailure);
+        Assert.True(
+            uri.Error.StartsWith("[Lab.Untrusted]", StringComparison.Ordinal) || uri.Error.StartsWith("[Lab.InvalidArgument]", StringComparison.Ordinal),
+            uri.Error);
+    }
 }

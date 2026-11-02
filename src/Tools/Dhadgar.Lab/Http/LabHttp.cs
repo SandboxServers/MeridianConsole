@@ -52,6 +52,7 @@ public sealed class LabHttp
         ["notifications"] = LabPorts.Notifications,
         ["discord"] = LabPorts.Discord,
         ["betterauth"] = LabPorts.BetterAuth,
+        ["sink"] = LabPorts.Sink,
     };
 
     private static readonly HashSet<string> RefusedHeaders = new(StringComparer.OrdinalIgnoreCase)
@@ -81,7 +82,7 @@ public sealed class LabHttp
     public static HttpMessageHandler CreateHandler() => new SocketsHttpHandler { AllowAutoRedirect = false, UseProxy = false };
 
     /// <summary>
-    /// Sends one probe to <paramref name="via"/> (<c>gateway</c>, <c>agent_ingress</c> or a lab service name).
+    /// Sends one probe to <paramref name="via"/> (<c>gateway</c>, <c>agent_ingress</c>, <c>sink</c> or a lab service name).
     /// </summary>
     public async Task<Result<HttpProbeResult>> SendAsync(
         string via,
@@ -248,7 +249,9 @@ public sealed class LabHttp
             return Result<Uri>.Failure("[Lab.InvalidArgument] path is not a valid URI path");
         }
 
-        return LabHosts.IsLabEndpoint(target)
+        bool trusted = LabHosts.IsLabEndpoint(target)
+            || (string.Equals(via, "sink", StringComparison.Ordinal) && LabHosts.IsSinkEndpoint(target));
+        return trusted
             ? Result<Uri>.Success(target)
             : Result<Uri>.Failure("[Lab.Untrusted] the composed URI is not a lab endpoint");
     }

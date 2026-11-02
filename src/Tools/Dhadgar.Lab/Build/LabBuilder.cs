@@ -33,7 +33,9 @@ public static class LabBuilder
     [
         new("gateway", "src/Dhadgar.Gateway/Dhadgar.Gateway.csproj", "Dhadgar.Gateway.dll"),
         new("nodes", "src/Dhadgar.Nodes/Dhadgar.Nodes.csproj", "Dhadgar.Nodes.dll"),
-        new("probe", "src/Tools/Dhadgar.Lab.Probe/Dhadgar.Lab.Probe.csproj", "Dhadgar.Lab.Probe.dll"),
+        new("notifications", "src/Dhadgar.Notifications/Dhadgar.Notifications.csproj", "Dhadgar.Notifications.dll"),
+        new("discord", "src/Dhadgar.Discord/Dhadgar.Discord.csproj", "Dhadgar.Discord.dll"),
+        new("probe", "src/Tools/Dhadgar.Lab.Probe/Dhadgar.Lab.Probe.csproj", "meridian-lab-probe.dll"),
         new("identity", "src/Dhadgar.Identity/Dhadgar.Identity.csproj", "Dhadgar.Identity.dll"),
         new("betterauth", "src/Dhadgar.BetterAuth/package.json", string.Empty, "src/Dhadgar.BetterAuth", "src/server.js"),
         new("panel", "src/Dhadgar.Panel/package.json", string.Empty, "src/Dhadgar.Panel", "dist/server/entry.mjs"),
@@ -145,6 +147,13 @@ public static class LabBuilder
     /// <param name="memberTag">The build-id tag from <see cref="ImageTag"/>.</param>
     public static IReadOnlyList<string> LinuxMemberLatestTagArgs(string memberTag) => ["tag", memberTag, LinuxMemberLatestTag];
 
+    /// <summary>
+    /// The Dockerfile under <c>tools/lab/images</c> for a project: the probe image (sink, L36) uses <c>probe.Dockerfile</c>,
+    /// every other service uses <c>dotnet-service.Dockerfile</c>.
+    /// </summary>
+    internal static string DockerfileFor(string projectName) =>
+        string.Equals(projectName, "probe", StringComparison.Ordinal) ? "probe.Dockerfile" : "dotnet-service.Dockerfile";
+
     /// <summary>Lock-file drift marker returned when restore would change a lock file.</summary>
     public const string LockDriftError = "[Lab.ProcessFailed] lock file drift";
 
@@ -220,7 +229,7 @@ public static class LabBuilder
 
             Result<string> csproj = validator.ValidatePath(Path.Combine(checkoutPath, project.Csproj.Replace('/', Path.DirectorySeparatorChar)), [checkoutPath]);
             Result<string> publishDir = validator.ValidatePath(Path.Combine(outputRoot.Value!, project.Name), [paths.Builds]);
-            Result<string> dockerfile = validator.ValidatePath(Path.Combine(checkoutPath, "tools", "lab", "images", "dotnet-service.Dockerfile"), [checkoutPath]);
+            Result<string> dockerfile = validator.ValidatePath(Path.Combine(checkoutPath, "tools", "lab", "images", DockerfileFor(project.Name)), [checkoutPath]);
             if (csproj.IsFailure || publishDir.IsFailure || dockerfile.IsFailure)
             {
                 return Result<LabBuildDto>.Failure("[Lab.InvalidArgument] build path is not valid");
