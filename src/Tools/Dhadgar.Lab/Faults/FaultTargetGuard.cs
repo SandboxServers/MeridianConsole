@@ -145,6 +145,34 @@ public sealed class FaultTargetGuard(ILabTargetRegistry registry, IDockerInspect
     }
 
     /// <summary>
+    /// Resolves a pool member for a non-fault exec (<c>cli_run</c>). Same registry, inspect and tripwire checks as a
+    /// member fault, but no fault kind, so <c>fault_list_targets</c> never lists it. Every refusal is <c>[Lab.BlastRadius]</c>.
+    /// </summary>
+    /// <param name="targetId">The target id.</param>
+    /// <param name="ct">Cancels the live inspect.</param>
+    public async Task<Result<ResolvedTarget>> ResolveMemberForExecAsync(string targetId, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(targetId);
+        if (string.Equals(targetId, HostTargetId, StringComparison.Ordinal))
+        {
+            return Result<ResolvedTarget>.Failure("[Lab.BlastRadius] host is read-only");
+        }
+
+        var target = registry.Find(targetId);
+        if (target is null)
+        {
+            return Result<ResolvedTarget>.Failure("[Lab.BlastRadius] target is not registered");
+        }
+
+        if (target.Kind != LabTargetKind.Member)
+        {
+            return Result<ResolvedTarget>.Failure("[Lab.BlastRadius] cli_run runs only on a pool member");
+        }
+
+        return await ResolveMemberAsync(target, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// The fault kinds a target of this kind accepts. Shown by <c>fault_list_targets</c>; the guard checks the same table.
     /// </summary>
     /// <param name="kind">The target kind.</param>
