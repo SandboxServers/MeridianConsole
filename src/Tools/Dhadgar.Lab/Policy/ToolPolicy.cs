@@ -114,11 +114,7 @@ public static class ToolPolicy
         // L27 (registered)
         // L28
         // L29
-        // L30
-        "pool_list",
-        "pool_acquire",
-        "pool_release",
-        "member_reset",
+        // L30 (registered)
         // L32
         "agent_install",
         "agent_uninstall",
