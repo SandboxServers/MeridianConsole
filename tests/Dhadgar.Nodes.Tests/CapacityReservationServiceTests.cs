@@ -823,5 +823,15 @@ public sealed class CapacityReservationServiceTests
             : base("Injected transient failure for the retry test.")
         {
         }
+
+        public TransientTestException(string message)
+            : base(message)
+        {
+        }
+
+        public TransientTestException(string message, Exception innerException)
+            : base(message, innerException)
+        {
+        }
     }
 }
