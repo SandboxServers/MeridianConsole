@@ -15,7 +15,7 @@ namespace Dhadgar.Lab.Jobs;
 public delegate Task<Result<JobOutcome>> JobWork(JobContext context, CancellationToken ct);
 
 /// <summary>
-/// What a finished job reports: its overall grade (<c>pass</c>, <c>fail</c> or <c>incomplete</c>) and an optional result.
+/// What a finished job reports: its overall grade (<c>pass</c>, <c>weak</c>, <c>fail</c> or <c>incomplete</c>) and an optional result.
 /// </summary>
 public sealed record JobOutcome(string Overall, JsonNode? Result);
 

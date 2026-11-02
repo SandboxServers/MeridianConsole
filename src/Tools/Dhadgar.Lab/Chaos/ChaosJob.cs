@@ -263,10 +263,13 @@ public static class ChaosJob
             }
         }
 
-        /// <summary>The job outcome: <c>pass</c> when no invariant was violated and no check failed.</summary>
+        /// <summary>
+        /// The job outcome: <c>pass</c> only when at least one workload loop succeeded, no invariant was violated, no check
+        /// failed and the timeline was written. A run with no successful loop (none, or every loop errored) fails, with a reason.
+        /// </summary>
         public JobOutcome Outcome()
         {
-            string overall = _violations == 0 && _checkErrors == 0 && !_timelineFailed ? "pass" : "fail";
+            string overall = _workloadLoops > 0 && _violations == 0 && _checkErrors == 0 && !_timelineFailed ? "pass" : "fail";
             var result = new JsonObject
             {
                 ["plan"] = _run.Plan.Id,
@@ -281,6 +284,7 @@ public static class ChaosJob
                 ["checkpoints"] = _checkpoints,
                 ["violations"] = _violations,
                 ["check_errors"] = _checkErrors,
+                ["reason"] = _workloadLoops == 0 ? "no workload loop succeeded" : null,
             };
             return new JobOutcome(overall, result);
         }

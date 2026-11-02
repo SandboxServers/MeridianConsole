@@ -250,6 +250,12 @@ Every tool has one gate in `Policy/ToolPolicy`. The dispatcher reads the gate be
 
 A Leased call's lease is watched for the whole call. If the lease expires, is released or is taken over while the tool runs, the tool's token is cancelled and the call returns `[Lab.LeaseLost]`.
 
+## Soak and chaos
+
+- **Soak grade (D-ML112).** `soak_run` ends `pass`, `weak` or `fail`. `fail` is a sampler error, a failed I7 or no successful workload loop. `weak` is fewer than 3 successful loops (reason `fewer than 3 workload loops`), or too few resource samples for I7 or I7 skipped (reason `too few resource samples for I7`). The result carries a `reason`, null on pass.
+- **Soak rows (D-ML156).** `soak_run` reads the spec and checks its `rows` before the job starts. A row not in the spec returns `[Lab.NotFound]`, and a row whose dependency is not looped returns `[Lab.InvalidArgument]`. A spec over 1 MiB, or one that does not load, is refused the same way; no job starts.
+- **Chaos grade (D-ML141).** `chaos_run` passes only when at least one workload loop succeeded, with no violation, no check error and a written timeline. A run with no successful loop (none, or every loop errored) fails with reason `no workload loop succeeded`.
+
 ## Pool
 
 - **Model.** A pool member is a machine the lab can lease: a Linux container, the host (`m:host`), or a later tier. `pool_list` shows the providers and members. `pool_acquire` takes constraints (`os`, `min_os_build`, `sku`, `isolation`, `kind`, `arch`, `reboot`, `count`) and a `purpose`; the lease is the caller's lease. It picks the first provider whose dimensions match and whose per-OS limit has room, else `[Lab.PoolExhausted]`. The host provider is chosen only when `kind` is `host`; open constraints never return it.
