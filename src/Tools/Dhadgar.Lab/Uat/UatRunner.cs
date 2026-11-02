@@ -82,25 +82,46 @@ public sealed class UatRunner
     private readonly InvariantLedger? _ledger;
     private readonly DaemonIdentity? _daemon;
     private readonly PoolManager? _pool;
+    private readonly IPoolMemberPreparer? _preparer;
 
     /// <summary>
     /// Creates the runner. With <paramref name="observations"/> and <paramref name="paths"/> every run and step is recorded in the run's <c>events.jsonl</c> (C18).
     /// <paramref name="settle"/> is the wait after a row with faults before its clauses run; null uses <see cref="RowExecutor.DefaultSettle"/>.
+    /// <paramref name="preparer"/> installs what a pool member needs (the CLI) after the pool acquires or resets it (D-ML173); null prepares nothing.
     /// </summary>
-    public UatRunner(LabToolDispatcher dispatcher, LeaseBook leases, ClauseEvaluator evaluator, ICapabilityProbe probe, TimeProvider time, ILabObservationSink? observations = null, LabPaths? paths = null, InvariantMonitor? invariants = null, InvariantLedger? ledger = null, DaemonIdentity? daemon = null, TimeSpan? settle = null, PoolManager? pool = null)
+    public UatRunner(LabToolDispatcher dispatcher, LeaseBook leases, ClauseEvaluator evaluator, ICapabilityProbe probe, TimeProvider time, ILabObservationSink? observations = null, LabPaths? paths = null, InvariantMonitor? invariants = null, InvariantLedger? ledger = null, DaemonIdentity? daemon = null, TimeSpan? settle = null, PoolManager? pool = null, IPoolMemberPreparer? preparer = null)
     {
         _pool = pool;
+        _preparer = preparer;
         ArgumentNullException.ThrowIfNull(dispatcher);
         ArgumentNullException.ThrowIfNull(evaluator);
         _leases = leases ?? throw new ArgumentNullException(nameof(leases));
         _probe = probe ?? throw new ArgumentNullException(nameof(probe));
         _time = time ?? throw new ArgumentNullException(nameof(time));
-        _rows = new RowExecutor(dispatcher, leases, evaluator, time, observations, CheckpointAsync, settle ?? RowExecutor.DefaultSettle, pool is null ? null : pool.ResetAsync);
+        _rows = new RowExecutor(dispatcher, leases, evaluator, time, observations, CheckpointAsync, settle ?? RowExecutor.DefaultSettle, pool is null ? null : (id, ct) => ResetAndPrepareAsync(pool, id, ct));
         _observations = observations;
         _uatRuns = paths?.UatRuns;
         _invariants = invariants;
         _ledger = ledger;
         _daemon = daemon;
+    }
+
+    /// <summary>True when a preparer is wired, so every member the run acquires or resets is prepared (for the wiring test).</summary>
+    internal bool PreparesMembers => _preparer is not null;
+
+    /// <summary>
+    /// Resets one member, then prepares it. A preparation failure is returned as the row's failure (D-ML173).
+    /// </summary>
+    private async Task<Result<PoolMember>> ResetAndPrepareAsync(PoolManager pool, string memberId, CancellationToken ct)
+    {
+        Result<PoolMember> reset = await pool.ResetAsync(memberId, ct).ConfigureAwait(false);
+        if (reset.IsFailure || _preparer is null)
+        {
+            return reset;
+        }
+
+        Result prepared = await _preparer.PrepareAsync(reset.Value!, ct).ConfigureAwait(false);
+        return prepared.IsFailure ? Result<PoolMember>.Failure(prepared.Error) : reset;
     }
 
     /// <summary>
@@ -197,6 +218,20 @@ public sealed class UatRunner
                 {
                     run.Members = acquired.Value.Select(m => m.MemberId).ToArray();
                     acquiredMembers = run.Members;
+
+                    // Prepare each acquired member in order; the first failure becomes the section's pool error. The release loop still releases them.
+                    if (_preparer is not null)
+                    {
+                        foreach (PoolMember member in acquired.Value)
+                        {
+                            Result prepared = await _preparer.PrepareAsync(member, ct).ConfigureAwait(false);
+                            if (prepared.IsFailure)
+                            {
+                                run.PoolError = prepared.Error;
+                                break;
+                            }
+                        }
+                    }
                 }
                 else
                 {
