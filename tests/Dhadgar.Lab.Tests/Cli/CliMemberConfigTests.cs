@@ -1,7 +1,10 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Dhadgar.Agent.Core.Files;
 using Dhadgar.Lab.Build;
 using Dhadgar.Lab.Docker;
+using Dhadgar.Lab.Stack;
+using Dhadgar.Lab.Tests.Pool;
 using Dhadgar.Lab.Tools.Cli;
 using Dhadgar.Shared.Results;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -48,13 +51,99 @@ public sealed class CliMemberConfigTests
     }
 
     [Fact]
-    public void RenderMemberConfig_WithoutKey_HoldsOnlyTheGatewayUrl()
+    public void RenderMemberConfig_WithoutKey_HoldsTheServiceUrlsOnly()
     {
         using JsonDocument doc = JsonDocument.Parse(CliMemberInstall.RenderMemberConfig(null));
 
-        Assert.Equal("http://meridian-lab-gateway:8080", doc.RootElement.GetProperty("gateway_url").GetString());
-        Assert.Equal("http://meridian-lab-notifications:8080", doc.RootElement.GetProperty("notifications_url").GetString());
+        Assert.Equal(CliMemberInstall.MemberGatewayUrl, doc.RootElement.GetProperty("gateway_url").GetString());
+        Assert.Equal(CliMemberInstall.MemberIdentityUrl, doc.RootElement.GetProperty("identity_url").GetString());
+        Assert.Equal(CliMemberInstall.MemberNodesUrl, doc.RootElement.GetProperty("nodes_url").GetString());
+        Assert.Equal(CliMemberInstall.MemberNotificationsUrl, doc.RootElement.GetProperty("notifications_url").GetString());
+        Assert.Equal(CliMemberInstall.MemberDiscordUrl, doc.RootElement.GetProperty("discord_url").GetString());
         Assert.False(doc.RootElement.TryGetProperty("admin_api_key", out _));
+    }
+
+    [Fact]
+    public void AdminCredentialFor_MapsOnlyTheAdminVerbs()
+    {
+        Assert.Equal(LabCredentialRefs.NotificationsAdmin, CliMemberInstall.AdminCredentialFor("notifications"));
+        Assert.Equal(LabCredentialRefs.DiscordAdmin, CliMemberInstall.AdminCredentialFor("discord"));
+        Assert.Null(CliMemberInstall.AdminCredentialFor("nodes"));
+    }
+
+    [Fact]
+    public void CliPublishArgs_SkipsGlobalToolInstall_AndHasNoRid()
+    {
+        IReadOnlyList<string> args = LabBuilder.CliPublishArgs("C:\\repo\\cli.csproj", "C:\\out");
+
+        Assert.Equal(["publish", "C:\\repo\\cli.csproj", "-c", "Release", "--no-restore", "-p:SkipGlobalToolInstall=true", "-o", "C:\\out"], args);
+        Assert.DoesNotContain(args, item => item.StartsWith("-r", StringComparison.Ordinal) || item.Contains("RuntimeIdentifier", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void LatestCliDirectory_ReturnsTheCliFolder()
+    {
+        string root = NewStagingDirectory();
+        try
+        {
+            LabPaths paths = LabPaths.FromRoot(root, Path.Combine(root, "repo"));
+            WriteLatestBuild(paths, withCli: true);
+
+            string? dir = CliMemberInstall.LatestCliDirectory(paths, Validator);
+
+            Assert.NotNull(dir);
+            Assert.Equal(Path.GetFullPath(Path.Combine(paths.Builds, BuildId, "cli")), Path.GetFullPath(dir!));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void LatestCliDirectory_WithoutCliFolder_IsNull()
+    {
+        string root = NewStagingDirectory();
+        try
+        {
+            LabPaths paths = LabPaths.FromRoot(root, Path.Combine(root, "repo"));
+            WriteLatestBuild(paths, withCli: false);
+
+            Assert.Null(CliMemberInstall.LatestCliDirectory(paths, Validator));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void SweepStale_RemovesOnlyOldConfigFiles()
+    {
+        string dir = NewStagingDirectory();
+        try
+        {
+            DateTimeOffset now = DateTimeOffset.UtcNow;
+            string old = Path.Combine(dir, "cli-config-a.json");
+            string fresh = Path.Combine(dir, "cli-config-b.json");
+            string other = Path.Combine(dir, "other.json");
+            File.WriteAllText(old, "{}");
+            File.SetLastWriteTimeUtc(old, now.AddMinutes(-10).UtcDateTime);
+            File.WriteAllText(fresh, "{}");
+            File.WriteAllText(other, "{}");
+            File.SetLastWriteTimeUtc(other, now.AddMinutes(-10).UtcDateTime);
+
+            int removed = CliMemberInstall.SweepStale(dir, now, TimeSpan.FromMinutes(5));
+
+            Assert.Equal(1, removed);
+            Assert.False(File.Exists(old));
+            Assert.True(File.Exists(fresh));
+            Assert.True(File.Exists(other));
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
     }
 
     [Fact]
@@ -152,6 +241,64 @@ public sealed class CliMemberConfigTests
         {
             File.Delete(blocker);
         }
+    }
+
+    [Fact]
+    public async Task InstallConfigAsync_WithKey_StagesUnderTheStagingFolder_AndNoArgCarriesTheKey()
+    {
+        string root = NewStagingDirectory();
+        try
+        {
+            LabPaths paths = LabPaths.FromRoot(root, Path.Combine(root, "repo"));
+            string staging = CliMemberInstall.StagingDirectory(paths);
+            var staged = new List<(string Path, string Text)>();
+            var docker = new FakeDockerCli
+            {
+                OnCall = call =>
+                {
+                    if (call[0] == "cp" && File.Exists(call[1]))
+                    {
+                        staged.Add((call[1], File.ReadAllText(call[1])));
+                    }
+                },
+            };
+
+            Result result = await CliMemberInstall.InstallConfigAsync(docker, Container, staging, FakeAdminKey, Validator, CancellationToken.None);
+
+            Assert.True(result.IsSuccess);
+            Assert.Single(staged);
+            Assert.Contains(FakeAdminKey, staged[0].Text, StringComparison.Ordinal);
+            Assert.StartsWith(Path.GetFullPath(staging) + Path.DirectorySeparatorChar, Path.GetFullPath(staged[0].Path), StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(docker.Calls.SelectMany(c => c), item => item.Contains(FakeAdminKey, StringComparison.Ordinal));
+            Assert.Empty(Directory.GetFiles(staging));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private const string BuildId = "0123abcd";
+
+    /// <summary>Writes a latest-build stamp (as <c>LastBuildReaderTests</c> does), with or without a <c>cli</c> folder.</summary>
+    private static void WriteLatestBuild(LabPaths paths, bool withCli)
+    {
+        string dir = Path.Combine(paths.Builds, BuildId);
+        _ = Directory.CreateDirectory(dir);
+        if (withCli)
+        {
+            _ = Directory.CreateDirectory(Path.Combine(dir, "cli"));
+        }
+
+        var json = new JsonObject
+        {
+            ["build_id"] = BuildId,
+            ["commit"] = "0123abcd4567ef89",
+            ["dirty"] = true,
+            ["checkout"] = Path.Combine(paths.Builds, "..", "repo", "src", "lab"),
+        };
+        File.WriteAllText(Path.Combine(dir, "build.json"), json.ToJsonString());
+        File.WriteAllText(Path.Combine(paths.Builds, "latest.txt"), BuildId);
     }
 
     private static string NewStagingDirectory()
