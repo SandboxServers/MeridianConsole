@@ -185,14 +185,19 @@ public sealed class ModelHunterTests : IDisposable
     public async Task Replay_RestartInsideCut_IsNotSent()
     {
         // D-ML119: Nodes does not start while its database is cut (F104), so the hunt sends no svc_restart there.
-        var lab = new FakeLab { RestartFails = true };
+        var lab = new FakeLab { RestartFailsWhileCut = true };
         ModelHunter hunter = NewHunter(lab);
 
         Result<ModelHunter.CaseResult> replay = await hunter.ReplayAsync([new HuntOp(HuntOpKind.PgDown), new HuntOp(HuntOpKind.RestartNodes), new HuntOp(HuntOpKind.PgUp), new HuntOp(HuntOpKind.Mint)], CancellationToken.None);
 
         Assert.True(replay.IsSuccess, replay.Error);
         Assert.False(replay.Value!.Diverged);
-        Assert.Equal(0, lab.Calls.Count(call => call.Tool == "svc_restart"));
+        int cutStart = lab.Calls.FindIndex(call => call.Tool == "fault_proxy_disable");
+        int cutEnd = lab.Calls.FindIndex(call => call.Tool == "fault_heal");
+        Assert.DoesNotContain(lab.Calls.Skip(cutStart).Take(cutEnd - cutStart), call => call.Tool == "svc_restart");
+        // The case-start restart is outside any cut, so it is the only svc_restart before the case's data reset.
+        int dataReset = lab.Calls.FindIndex(call => call.Tool == "stack_reset_data");
+        Assert.Equal(1, lab.Calls.Take(dataReset).Count(call => call.Tool == "svc_restart"));
     }
 
     [Fact]
@@ -232,7 +237,10 @@ public sealed class ModelHunterTests : IDisposable
         Result<ModelHunter.CaseResult> replay = await hunter.ReplayAsync([new HuntOp(HuntOpKind.Mint), new HuntOp(HuntOpKind.RestartNodes)], CancellationToken.None);
 
         Assert.True(replay.IsSuccess, replay.Error);
-        Assert.Equal(1, lab.Calls.Count(call => call.Tool == "svc_restart"));
+        // The new hunter's case-start restart, then the op's restart after the data reset.
+        Assert.Equal(2, lab.Calls.Count(call => call.Tool == "svc_restart"));
+        int dataReset = lab.Calls.FindIndex(call => call.Tool == "stack_reset_data");
+        Assert.Contains(lab.Calls.Skip(dataReset), call => call.Tool == "svc_restart");
     }
 
     [Fact]
@@ -269,7 +277,8 @@ public sealed class ModelHunterTests : IDisposable
         Assert.True(pgDown >= 0 && ops.FindIndex(pgDown, op => op.Kind is HuntOpKind.Enroll or HuntOpKind.EnrollAgain) > pgDown,
             "the repro must cut Postgres before an enroll");
 
-        Result<ModelHunter.CaseResult> replay = await hunter.ReplayAsync(ops, CancellationToken.None);
+        // F120: the reported case replays on a new hunter over a new lab with the same flags, as the next job would.
+        Result<ModelHunter.CaseResult> replay = await NewHunter(new FakeLab { StalePoolAfterCut = true }).ReplayAsync(ops, CancellationToken.None);
         Assert.True(replay.IsSuccess, replay.Error);
         Assert.True(replay.Value!.Diverged);
     }
@@ -287,19 +296,88 @@ public sealed class ModelHunterTests : IDisposable
     }
 
     [Fact]
-    public async Task Hunter_CaseAfterCut_RestartsNodesFirst()
+    public async Task Hunter_CaseStart_RestartsWhenNewCutOrAfterCut()
     {
+        // F120: a case restarts Nodes at its start when the hunter is new, the case cuts Postgres, or the previous case cut.
         var lab = new FakeLab();
         ModelHunter hunter = NewHunter(lab);
+        var cases = new (HuntOp[] Ops, bool Restarts)[]
+        {
+            ([new HuntOp(HuntOpKind.Mint)], true),
+            ([new HuntOp(HuntOpKind.Mint)], false),
+            ([new HuntOp(HuntOpKind.PgDown), new HuntOp(HuntOpKind.PgUp)], true),
+            ([new HuntOp(HuntOpKind.Mint)], true),
+        };
 
-        Result<ModelHunter.CaseResult> first = await hunter.ReplayAsync([new HuntOp(HuntOpKind.PgDown), new HuntOp(HuntOpKind.PgUp)], CancellationToken.None);
-        Assert.True(first.IsSuccess, first.Error);
-        Assert.Equal(0, lab.Calls.Count(call => call.Tool == "svc_restart"));
+        foreach ((HuntOp[] ops, bool restarts) in cases)
+        {
+            int before = lab.Calls.Count;
+            Result<ModelHunter.CaseResult> replay = await hunter.ReplayAsync(ops, CancellationToken.None);
+            Assert.True(replay.IsSuccess, replay.Error);
 
-        int before = lab.Calls.Count;
-        Result<ModelHunter.CaseResult> second = await hunter.ReplayAsync([new HuntOp(HuntOpKind.Mint)], CancellationToken.None);
-        Assert.True(second.IsSuccess, second.Error);
-        Assert.Equal("svc_restart", lab.Calls[before].Tool);
+            int dataReset = lab.Calls.FindIndex(before, call => call.Tool == "stack_reset_data");
+            bool restarted = lab.Calls.Skip(before).Take(dataReset - before).Any(call => call.Tool == "svc_restart");
+            Assert.Equal(restarts, restarted);
+        }
+    }
+
+    [Fact]
+    public async Task Replay_NewHunter_SameResultAsWarmHunter()
+    {
+        // F120, run 10: the same cut case diverges on a warm hunter and on a new one, because a new hunter restarts and warms first.
+        var labA = new FakeLab { StalePoolAfterCut = true };
+        ModelHunter hunterA = NewHunter(labA);
+        var clean = new[] { new HuntOp(HuntOpKind.Mint), new HuntOp(HuntOpKind.Enroll, 0) };
+        var cut = new[] { new HuntOp(HuntOpKind.Mint), new HuntOp(HuntOpKind.PgDown), new HuntOp(HuntOpKind.PgUp), new HuntOp(HuntOpKind.Enroll, 0) };
+
+        Assert.True((await hunterA.ReplayAsync(clean, CancellationToken.None)).IsSuccess);
+        Result<ModelHunter.CaseResult> warm = await hunterA.ReplayAsync(cut, CancellationToken.None);
+        Assert.True(warm.IsSuccess, warm.Error);
+        Assert.True(warm.Value!.Diverged);
+        Assert.Equal(3, warm.Value.Index);
+
+        var labB = new FakeLab { StalePoolAfterCut = true };
+        Result<ModelHunter.CaseResult> fresh = await NewHunter(labB).ReplayAsync(cut, CancellationToken.None);
+        Assert.True(fresh.IsSuccess, fresh.Error);
+        Assert.True(fresh.Value!.Diverged);
+        Assert.Equal(3, fresh.Value.Index);
+    }
+
+    [Fact]
+    public async Task Hunter_NewHunter_FirstCaseRestartsAndWarms()
+    {
+        var lab = new FakeLab();
+        Result<ModelHunter.CaseResult> replay = await NewHunter(lab).ReplayAsync([new HuntOp(HuntOpKind.Mint)], CancellationToken.None);
+        Assert.True(replay.IsSuccess, replay.Error);
+
+        int dataReset = lab.Calls.FindIndex(call => call.Tool == "stack_reset_data");
+        string[] before = lab.Calls.Take(dataReset).Select(call => call.Tool).ToArray();
+        Assert.Equal(new[] { "fault_reset", "svc_restart", "nodes_token_mint", "nodes_enroll_probe" }, before);
+
+        JsonElement probe = lab.Arguments.Single(call => call.Tool == "nodes_enroll_probe").Args;
+        Assert.Equal("hunt-warmup", probe.GetProperty("hostname").GetString());
+        Assert.Equal("nodes", probe.GetProperty("via").GetString());
+    }
+
+    [Fact]
+    public async Task Hunter_WarmUpNot201_IsInfrastructure()
+    {
+        var lab = new FakeLab { WarmUpStatus = 503 };
+        Result<ModelHunter.CaseResult> replay = await NewHunter(lab).ReplayAsync([new HuntOp(HuntOpKind.Mint)], CancellationToken.None);
+
+        Assert.False(replay.IsSuccess);
+        Assert.Equal("[Lab.Unavailable] nodes warm-up enroll answered 503", replay.Error);
+    }
+
+    [Fact]
+    public async Task Hunter_RunSeedAboveLongMax_PayloadUnsigned()
+    {
+        const ulong seed = 12499590173714643239UL;
+        Result<JobOutcome> outcome = await NewHunter(new FakeLab { StalePoolAfterCut = true }).RunAsync(seed, 200, 30, null, "build-1", CancellationToken.None);
+
+        Assert.True(outcome.IsSuccess, outcome.Error);
+        Assert.Equal("fail", outcome.Value!.Overall);
+        Assert.Equal(seed, outcome.Value.Result!["run_seed"]!.GetValue<ulong>());
     }
 
     [Fact]
@@ -380,7 +458,9 @@ public sealed class ModelHunterTests : IDisposable
         private readonly List<bool> _used = [];
         private bool _pgDown;
         private int _nodes;
-        private bool _stale;
+        private int _idle;
+        private int _staleIdle;
+        private bool _healThrown;
         private int _queuedI1;
         private int _startI1;
         private bool _started;
@@ -398,8 +478,14 @@ public sealed class ModelHunterTests : IDisposable
 
         public bool MintWithoutTokenRef { get; init; }
 
-        /// <summary>When true, <c>svc_restart</c> answers an error result, so a call that is sent makes the case fail.</summary>
-        public bool RestartFails { get; init; }
+        /// <summary>When true, <c>svc_restart</c> answers an error result while the cut is active, so a call that is sent inside a cut makes the case fail (F104).</summary>
+        public bool RestartFailsWhileCut { get; init; }
+
+        /// <summary>Nodes' startup background services leave one idle pooled connection.</summary>
+        public bool RestartWarm { get; init; }
+
+        /// <summary>When non-zero, the warm-up enroll (hostname <c>hunt-warmup</c>) answers this status instead of the product's.</summary>
+        public int WarmUpStatus { get; init; }
 
         /// <summary>
         /// When true, <c>fault_proxy_disable</c> answers an error result while an earlier disable has not been followed by
@@ -408,8 +494,8 @@ public sealed class ModelHunterTests : IDisposable
         public bool DisableClashes { get; init; }
 
         /// <summary>
-        /// When true, a healed cut leaves the enroll pool stale until <c>svc_restart</c>. The first enroll on a stale pool while not
-        /// cut answers 500 and queues one I1 for the next <c>invariants_check</c> (run 9's product behaviour).
+        /// A cut kills the idle pooled connections; the next enroll after heal that takes one answers 500 and queues one I1 for the
+        /// next <c>invariants_check</c> (run 9's product behaviour).
         /// </summary>
         public bool StalePoolAfterCut { get; init; }
 
@@ -458,8 +544,10 @@ public sealed class ModelHunterTests : IDisposable
                     _pgDown = false;
                     return Ok(new { });
                 case "fault_reset":
-                    if (HealThrows && _pgDown)
+                    if (HealThrows && _pgDown && !_healThrown)
                     {
+                        // The first heal during a cut throws and leaves the cut open; the next reset (the next case's start) heals.
+                        _healThrown = true;
                         throw new InvalidOperationException("heal failed");
                     }
 
@@ -471,7 +559,9 @@ public sealed class ModelHunterTests : IDisposable
                         return Ok(new { });
                     }
 
-                    if (_used.Count >= 8)
+                    // The warm-up mints before the case's data reset, which discards its token, so it is not held to the case's cap.
+                    bool warmup = args.TryGetProperty("label", out JsonElement label) && label.GetString() == "hunt-warmup";
+                    if (!warmup && _used.Count >= 8)
                     {
                         return Ok(new { });
                     }
@@ -488,6 +578,12 @@ public sealed class ModelHunterTests : IDisposable
                     _pgDown = true;
                     if (first)
                     {
+                        if (StalePoolAfterCut)
+                        {
+                            _staleIdle += _idle;
+                            _idle = 0;
+                        }
+
                         OnFirstPgDown?.Invoke();
                     }
 
@@ -496,14 +592,20 @@ public sealed class ModelHunterTests : IDisposable
                     Heal();
                     return Ok(new { healed = true });
                 case "svc_restart":
-                    if (RestartFails)
+                    if (RestartFailsWhileCut && _pgDown)
                     {
                         return new LabToolResult(true, JsonSerializer.SerializeToElement(new { error = tool }));
                     }
 
-                    _stale = false;
+                    _idle = RestartWarm ? 1 : 0;
+                    _staleIdle = 0;
                     return Ok(new { });
                 case "nodes_enroll_probe":
+                    if (IsWarmUp(args))
+                    {
+                        return Ok(new { status = WarmUpStatus != 0 ? WarmUpStatus : Enroll(args) });
+                    }
+
                     if (Throttles > 0)
                     {
                         Throttles--;
@@ -551,12 +653,11 @@ public sealed class ModelHunterTests : IDisposable
             }
         }
 
-        /// <summary>A heal ends the cut; with StalePoolAfterCut it leaves the pool stale until svc_restart.</summary>
-        private void Heal()
-        {
-            _stale |= _pgDown && StalePoolAfterCut;
-            _pgDown = false;
-        }
+        /// <summary>A heal ends the cut. The idle pool is not touched: a cut's dead connections stay dead until they are taken.</summary>
+        private void Heal() => _pgDown = false;
+
+        private static bool IsWarmUp(JsonElement args) =>
+            args.TryGetProperty("hostname", out JsonElement hostname) && hostname.GetString() == "hunt-warmup";
 
         private int Enroll(JsonElement args)
         {
@@ -565,14 +666,21 @@ public sealed class ModelHunterTests : IDisposable
                 return Pg500 ? 500 : 503;
             }
 
-            if (_stale)
+            if (_staleIdle > 0)
             {
-                // The first enroll on the stale pool answers 500, clears the stale state and queues one I1 (StalePoolAfterCut).
-                _stale = false;
+                // The first enroll that takes a dead pooled connection answers 500 and queues one I1 (StalePoolAfterCut).
+                _staleIdle--;
                 _queuedI1++;
                 return 500;
             }
 
+            int status = Admit(args);
+            _idle = Math.Max(_idle, 1);
+            return status;
+        }
+
+        private int Admit(JsonElement args)
+        {
             int index = int.Parse(args.GetProperty("token_ref").GetString()!["ref-".Length..], CultureInfo.InvariantCulture);
             if (_used[index])
             {
