@@ -1,9 +1,12 @@
 using System.Diagnostics;
+using Dhadgar.Agent.Core.Files;
+using Dhadgar.Lab.Build;
 using Dhadgar.Lab.Docker;
 using Dhadgar.Lab.Faults;
 using Dhadgar.Lab.Pool;
 using Dhadgar.Lab.Secrets;
 using Dhadgar.Lab.Tools.Pool;
+using Dhadgar.Lab.Uat.Bundle;
 using Dhadgar.Shared.Results;
 
 namespace Dhadgar.Lab.Tools.Cli;
@@ -96,6 +99,70 @@ public static class CliAllowlist
     }
 
     private static IReadOnlySet<string> Set(params string[] items) => items.ToHashSet(StringComparer.Ordinal);
+}
+
+/// <summary>
+/// Copies the latest build's CLI (L37, <c>LabBuilder.PublishCliAsync</c>) into a Linux pool member at <c>/opt/lab/cli/</c>.
+/// Every <c>docker</c> call is an <c>ArgumentList</c> item list; the host folder comes from the lab's own build root.
+/// </summary>
+public static class CliMemberInstall
+{
+    /// <summary>The directory in a Linux member the CLI is copied into.</summary>
+    public const string MemberCliDirectory = "/opt/lab/cli";
+
+    /// <summary>
+    /// The CLI folder of the lab's latest build, or null when the latest build has no CLI (or there is no build).
+    /// Never throws.
+    /// </summary>
+    public static string? LatestCliDirectory(LabPaths paths, IPathValidator validator)
+    {
+        ArgumentNullException.ThrowIfNull(paths);
+        ArgumentNullException.ThrowIfNull(validator);
+        BuildStamp stamp = LastBuildReader.Read(paths, validator);
+        if (string.IsNullOrEmpty(stamp.Id) || stamp.Id == BuildStamp.None.Id)
+        {
+            return null;
+        }
+
+        Result<string> dir = validator.ValidatePath(Path.Combine(paths.Builds, stamp.Id, "cli"), [paths.Builds]);
+        return dir.IsSuccess && Directory.Exists(dir.Value) ? dir.Value : null;
+    }
+
+    /// <summary>The <c>docker exec</c> that creates the member's CLI folder.</summary>
+    public static IReadOnlyList<string> MkdirArgs(string container) =>
+        ["exec", "-u", "root", container, "mkdir", "-p", MemberCliDirectory];
+
+    /// <summary>The <c>docker cp</c> that copies the CLI folder's contents into the member.</summary>
+    public static IReadOnlyList<string> CopyArgs(string container, string hostCliDirectory) =>
+        ["cp", Path.Combine(hostCliDirectory, "."), container + ":" + MemberCliDirectory + "/"];
+
+    /// <summary>The <c>docker exec</c> that makes the launcher executable (a Windows copy has no execute bit).</summary>
+    public static IReadOnlyList<string> ChmodArgs(string container) =>
+        ["exec", "-u", "root", container, "chmod", "755", CliRunTool.MemberCliPath];
+
+    /// <summary>
+    /// Installs the CLI into one Linux member: mkdir, copy, chmod. Any non-zero exit fails with <c>[Lab.Docker]</c>.
+    /// </summary>
+    public static async Task<Result> InstallAsync(IDockerCli docker, string container, string hostCliDirectory, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(docker);
+        IReadOnlyList<IReadOnlyList<string>> steps = [MkdirArgs(container), CopyArgs(container, hostCliDirectory), ChmodArgs(container)];
+        foreach (IReadOnlyList<string> step in steps)
+        {
+            Result<DockerOutput> output = await docker.RunAsync(DockerEngine.Linux, step, ct).ConfigureAwait(false);
+            if (output.IsFailure)
+            {
+                return Result.Failure(output.Error);
+            }
+
+            if (output.Value!.ExitCode != 0)
+            {
+                return Result.Failure("[Lab.Docker] installing the CLI into the member failed");
+            }
+        }
+
+        return Result.Success();
+    }
 }
 
 /// <summary>
