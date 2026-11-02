@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Dhadgar.Lab.Tests.Build;
 
-/// <summary>What the Node build stages and what the docker build argument list is (L34, D-ML144). No Docker.</summary>
+/// <summary>What the Node build stages and what the docker build argument list is (L34, D-ML146). No Docker.</summary>
 public sealed class NodeStagingTests
 {
     [Fact]

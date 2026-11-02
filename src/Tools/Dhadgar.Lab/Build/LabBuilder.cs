@@ -48,7 +48,7 @@ public static class LabBuilder
     /// <summary>Key and certificate extensions never staged.</summary>
     private static readonly string[] NodeExcludedExtensions = [".pem", ".key", ".pfx", ".p12"];
 
-    /// <summary>The lab-only Secrets stub (D-ML144), relative to the checkout, and where it lands in the stage.</summary>
+    /// <summary>The lab-only Secrets stub (D-ML146), relative to the checkout, and where it lands in the stage.</summary>
     private const string SecretsStubSource = "tools/lab/images/lab-secrets-stub.mjs";
 
     /// <summary>True when a file name may be staged: not an env file, not a credential file, not a key or certificate.</summary>
@@ -252,7 +252,7 @@ public static class LabBuilder
 
     /// <summary>
     /// Stages a Node app under <c>&lt;outputRoot&gt;\&lt;project&gt;</c>: <c>app/</c> (the app), <c>SharedAuth/</c> and
-    /// <c>lab/secrets-stub.mjs</c> (D-ML144). Env files, credential files, keys, installed or generated folders and reparse
+    /// <c>lab/secrets-stub.mjs</c> (D-ML146). Env files, credential files, keys, installed or generated folders and reparse
     /// points are never copied. Returns the stage folder.
     /// </summary>
     internal static Result<string> StageNodeApp(BuildProject project, string checkoutPath, string outputRoot, LabPaths paths, IPathValidator validator)

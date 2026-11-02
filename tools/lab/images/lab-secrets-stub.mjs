@@ -1,4 +1,4 @@
-// Lab only (meridian-lab L34, D-ML144). Never shipped with BetterAuth.
+// Lab only (meridian-lab L34, D-ML146). Never shipped with BetterAuth.
 // Preloaded into the lab BetterAuth container with NODE_OPTIONS=--import=file:///lab/secrets-stub.mjs.
 // It stands in for Dhadgar.Secrets and its /connect/token, which the lab does not run, so BetterAuth's real
 // loadSecrets() (src/Dhadgar.BetterAuth/src/secrets-client.js) runs unchanged. It serves only values the lab

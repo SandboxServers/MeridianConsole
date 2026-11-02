@@ -7,7 +7,7 @@ namespace Dhadgar.Lab.Services;
 /// <summary>
 /// BetterAuth behind the lab Gateway (C1 port 15130). BetterAuth always loads its secret and exchange key from the Secrets
 /// service at boot (<c>secrets-client.js</c> <c>loadSecrets</c>). The lab does not run Secrets, so the image preloads the
-/// loopback stub <c>tools/lab/images/lab-secrets-stub.mjs</c> (D-ML144), which serves the values this env file carries.
+/// loopback stub <c>tools/lab/images/lab-secrets-stub.mjs</c> (D-ML146), which serves the values this env file carries.
 /// The exchange private key reaches the container only through the env file.
 /// </summary>
 public sealed class BetterAuthLabAdapter : ILabServiceAdapter
@@ -27,7 +27,7 @@ public sealed class BetterAuthLabAdapter : ILabServiceAdapter
     /// <summary>The <c>kid</c> written into exchange token headers.</summary>
     public const string ExchangeKeyId = "betterauth-exchange-v1";
 
-    /// <summary>Loopback port of the lab Secrets stub inside the BetterAuth container (D-ML144); never published.</summary>
+    /// <summary>Loopback port of the lab Secrets stub inside the BetterAuth container (D-ML146); never published.</summary>
     public const int SecretsStubPort = 8099;
 
     /// <summary>Where the node-app image holds the stub (<c>COPY lab /lab</c>).</summary>

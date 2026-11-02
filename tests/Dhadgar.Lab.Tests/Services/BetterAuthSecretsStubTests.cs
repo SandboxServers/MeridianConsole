@@ -9,7 +9,7 @@ using Dhadgar.Lab.Services;
 namespace Dhadgar.Lab.Tests.Services;
 
 /// <summary>
-/// The lab Secrets stub (D-ML144) and BetterAuth's real <c>loadSecrets</c> must agree on paths and secret names. The static half
+/// The lab Secrets stub (D-ML146) and BetterAuth's real <c>loadSecrets</c> must agree on paths and secret names. The static half
 /// needs nothing; the live half runs the product client against the stub under <c>node</c>, without Docker.
 /// </summary>
 public sealed class BetterAuthSecretsStubTests

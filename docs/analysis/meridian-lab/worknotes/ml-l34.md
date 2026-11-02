@@ -38,7 +38,7 @@ NEXT STEP: step 2 (LabServiceContext optional ExchangePublicKeyPem/ExchangePriva
 LAST CHECK: build Dhadgar.Lab Release TreatWarningsAsErrors -> Build succeeded, 0 warnings, 0 errors.
 
 ## Session 3 (continuation 3 of 3, last)
-DONE: part 3 (a75d6893, env wiring), part 4 (8a63e685): LabEnvValue.cs (EscapedNewlinePem for Identity, SingleLinePem for BetterAuth since jose importPKCS8 needs no literal \n), IdentityLabAdapter (15010), BetterAuthLabAdapter (15130; DATABASE from POSTGRES_* parsed from ServiceDb string; BETTER_AUTH_TRUSTED_ORIGINS=14321, NODE_ENV unset), PanelLabAdapter (14321). Identity /healthz and BetterAuth /healthz read in source only (not run). BetterAuth has no env mode; it needs the lab Secrets stub (l34-ruling-1, D-ML144).
+DONE: part 3 (a75d6893, env wiring), part 4 (8a63e685): LabEnvValue.cs (EscapedNewlinePem for Identity, SingleLinePem for BetterAuth since jose importPKCS8 needs no literal \n), IdentityLabAdapter (15010), BetterAuthLabAdapter (15130; DATABASE from POSTGRES_* parsed from ServiceDb string; BETTER_AUTH_TRUSTED_ORIGINS=14321, NODE_ENV unset), PanelLabAdapter (14321). Identity /healthz and BetterAuth /healthz read in source only (not run). BetterAuth has no env mode; it needs the lab Secrets stub (l34-ruling-1, D-ML146).
 NEXT STEP: (4) register 3 adapters in LabDaemon.cs ~line 303 AddSingleton; LabBuilder.Projects add identity (dotnet src/Dhadgar.Identity/Dhadgar.Identity.csproj) + Node projects betterauth/panel via node-app.Dockerfile (needs BuildProject extension: staging of app + SharedAuth). Then (5) GatewayAdapter, (6), (7) tests, (8) checks.
 
 
