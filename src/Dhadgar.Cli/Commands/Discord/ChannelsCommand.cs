@@ -13,7 +13,7 @@ public sealed class ChannelsCommand
 
         if (string.IsNullOrEmpty(config.AdminApiKey))
         {
-            AnsiConsole.MarkupLine("[red]Admin API key required. Set 'admin_api_key' in config or DHADGAR_ADMIN_API_KEY env var.[/]");
+            AnsiConsole.MarkupLine("[red]Admin API key required. Set 'admin_api_key' in ~/.dhadgar/config.json.[/]");
             return 1;
         }
 

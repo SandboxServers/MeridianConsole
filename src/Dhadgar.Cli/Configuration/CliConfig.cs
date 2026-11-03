@@ -5,11 +5,14 @@ namespace Dhadgar.Cli.Configuration;
 
 public sealed class CliConfig
 {
-    private static readonly string ConfigDirectory = Path.Combine(
+    /// <summary>Test seam: when set, the config directory is this path instead of ~/.dhadgar.</summary>
+    internal static string? ConfigDirectoryOverride { get; set; }
+
+    private static string ConfigDirectory => ConfigDirectoryOverride ?? Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
         ".dhadgar");
 
-    private static readonly string ConfigFilePath = Path.Combine(ConfigDirectory, "config.json");
+    private static string ConfigFilePath => Path.Combine(ConfigDirectory, "config.json");
     private static readonly JsonSerializerOptions SaveOptions = new()
     {
         WriteIndented = true,
@@ -50,15 +53,15 @@ public sealed class CliConfig
     public DateTime? TokenExpiresAt { get; set; }
 
     // Computed properties for service URLs (all behind gateway)
-    // Note: Gateway's YARP config adds /api/v1/ prefix, so CLI clients use paths without it
+    // Gateway routes keep the /api/v1 prefix; the CLI's Refit paths are the service paths behind it
     [JsonIgnore]
-    public string EffectiveIdentityUrl => IdentityUrl ?? $"{(GatewayUrl ?? "http://localhost:5000").TrimEnd('/')}/identity";
+    public string EffectiveIdentityUrl => IdentityUrl ?? $"{EffectiveGatewayUrl}/api/v1/identity";
 
     [JsonIgnore]
     public string EffectiveSecretsUrl => SecretsUrl ?? $"{(GatewayUrl ?? "http://localhost:5000").TrimEnd('/')}/secrets";
 
     [JsonIgnore]
-    public string EffectiveNodesUrl => NodesUrl ?? $"{(GatewayUrl ?? "http://localhost:5000").TrimEnd('/')}/nodes";
+    public string EffectiveNodesUrl => NodesUrl ?? EffectiveGatewayUrl + "/api/v1";
 
     [JsonIgnore]
     public string EffectiveGatewayUrl => (GatewayUrl ?? "http://localhost:5000").TrimEnd('/');
@@ -75,9 +78,7 @@ public sealed class CliConfig
         {
             var config = new CliConfig
             {
-                GatewayUrl = "http://localhost:5000",
-                IdentityUrl = "http://localhost:5010",
-                SecretsUrl = "http://localhost:5110"
+                GatewayUrl = "http://localhost:5000"
             };
 
             // Create the config file with defaults on first run

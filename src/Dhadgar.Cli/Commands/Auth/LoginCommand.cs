@@ -61,6 +61,9 @@ public sealed class LoginCommand
 
         var identityApi = factory.CreateIdentityClient();
 
+        // Set only after the token response has been saved; the stored token is never cleared on failure.
+        var succeeded = false;
+
         await AnsiConsole.Status()
             .Spinner(Spinner.Known.Dots)
             .SpinnerStyle(Style.Parse("blue"))
@@ -89,6 +92,7 @@ public sealed class LoginCommand
                         config.IdentityUrl = identityUrl.ToString().TrimEnd('/');
                         config.TokenExpiresAt = DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn - 60);
                         config.Save();
+                        succeeded = true;
 
                         ctx.Status("[green]Authentication successful![/]");
                     }
@@ -97,9 +101,17 @@ public sealed class LoginCommand
                         AnsiConsole.MarkupLine($"[red]Authentication failed:[/] {(int)ex.StatusCode} {ex.StatusCode}");
                         WriteSafeApiErrorDetails(ex);
                     }
+                    catch (Exception ex) when (ex is HttpRequestException or ApiRequestException)
+                    {
+                        AnsiConsole.MarkupLine($"[red]Authentication failed:[/] could not reach Identity ({Markup.Escape(ex.Message)})");
+                    }
+                    catch (TaskCanceledException)
+                    {
+                        AnsiConsole.MarkupLine("[red]Authentication failed:[/] request timed out");
+                    }
             });
 
-        if (config.IsAuthenticated())
+        if (succeeded)
         {
             var panel = new Panel(new Markup(
                 $"[green]✓[/] Authenticated successfully\n" +
