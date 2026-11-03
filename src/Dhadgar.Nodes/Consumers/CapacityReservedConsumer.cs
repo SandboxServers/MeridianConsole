@@ -111,7 +111,7 @@ public sealed class CapacityReservedConsumer : IConsumer<CapacityReserved>
                 DiskUsagePercent: diskUsagePercent,
                 ThresholdPercent: threshold);
 
-            // Published through the consume context so the alert joins the bus outbox, not an injected endpoint
+            // Published through the consume context, so it is sent straight to the broker as part of this consume. It does not go through the bus outbox: this consumer has no inbox and saves nothing, so there is no commit to tie it to.
             await context.Publish(alertEvent, ct);
 
             _logger.LogDebug(
