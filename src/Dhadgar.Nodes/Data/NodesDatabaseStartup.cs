@@ -41,23 +41,71 @@ public sealed class EfNodesDatabaseMigrator(IServiceScopeFactory scopes) : INode
 }
 
 /// <summary>
-/// Migrates the database in the background in Development, so the host starts while Postgres is still down.
-/// Outside Development it never migrates (D-ML232). Readiness is reported by <see cref="NodesDatabaseHealthCheck"/>,
-/// which reads the schema itself (D-ML290).
+/// Migrates the database in Development: once before other hosted services start (bounded, F358), then in the
+/// background until it succeeds, so the host starts while Postgres is still down. Outside Development it never
+/// migrates (D-ML232). Readiness is reported by <see cref="NodesDatabaseHealthCheck"/>, which reads the schema
+/// itself (D-ML290).
 /// </summary>
 public sealed class NodesDatabaseStartupService(
     IServiceScopeFactory scopes,
     IHostEnvironment env,
     TimeProvider time,
-    ILogger<NodesDatabaseStartupService> logger) : BackgroundService
+    ILogger<NodesDatabaseStartupService> logger) : BackgroundService, IHostedLifecycleService
 {
     private static readonly TimeSpan InitialBackoff = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan MaxBackoff = TimeSpan.FromSeconds(30);
 
+    /// <summary>F358: bound on the first attempt, so a down database never holds the host's start (D-ML232).</summary>
+    internal static readonly TimeSpan StartupAttemptBound = TimeSpan.FromSeconds(10);
+
+    private volatile bool _migrated;
+
+    /// <summary>
+    /// F358: the host runs every StartingAsync before any StartAsync, so a migration here finishes before the
+    /// background services and the bus outbox query their tables.
+    /// </summary>
+    public async Task StartingAsync(CancellationToken cancellationToken)
+    {
+        if (!env.IsDevelopment())
+        {
+            return;
+        }
+
+        using var bound = new CancellationTokenSource(StartupAttemptBound, time);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, bound.Token);
+        try
+        {
+            var result = await MigrateOnceAsync(linked.Token);
+            if (result.IsSuccess)
+            {
+                _migrated = true;
+                logger.LogInformation("Nodes database migrations applied before hosted services start");
+                return;
+            }
+
+            logger.LogWarning("Nodes database migrations not applied at startup; retrying in the background. {Error}", result.Error);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            logger.LogWarning(
+                "Nodes database migrations did not finish within {BoundSeconds} s at startup; retrying in the background.",
+                StartupAttemptBound.TotalSeconds);
+        }
+    }
+
+    /// <inheritdoc />
+    public Task StartedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <inheritdoc />
+    public Task StoppingAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <inheritdoc />
+    public Task StoppedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (!env.IsDevelopment())
+        if (!env.IsDevelopment() || _migrated)
         {
             return;
         }
