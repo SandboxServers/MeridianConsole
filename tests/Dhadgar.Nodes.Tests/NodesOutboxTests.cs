@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Threading.Channels;
 using Dhadgar.Contracts.Nodes;
 using Dhadgar.Nodes.Data;
 using Dhadgar.Nodes.Data.Entities;
@@ -25,10 +26,13 @@ namespace Dhadgar.Nodes.Tests;
 /// and a committed reservation stores and delivers exactly one event, including after a transient retry (F230).
 /// Each context opens its own connection to a shared-cache in-memory database, because the outbox delivery service
 /// polls on its own context and SQLite rejects a second transaction on one connection (F231).
+/// Delivery is awaited through the probe's own sink with a deadline, never through harness inactivity, which fires 1.2 s after bus start (F351).
 /// </summary>
 public sealed class NodesOutboxTests
 {
     private static readonly Guid OrgId = Guid.NewGuid();
+    private static readonly TimeSpan DeliveryTimeout = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan NoDeliveryWindow = TimeSpan.FromSeconds(3); // >= 2 x QueryDelay (NodesMessaging) plus margin
 
     [Fact]
     public async Task ReserveAsync_SaveChangesFails_PublishesNothing()
@@ -59,8 +63,7 @@ public sealed class NodesOutboxTests
             Assert.Equal(0, await verify.Set<OutboxMessage>().CountAsync());
         }
 
-        var probe = harness.GetConsumerHarness<CapacityReservedProbe>();
-        Assert.False(await probe.Consumed.Any<CapacityReserved>());
+        Assert.False(await provider.GetRequiredService<DeliveredReservations>().WaitForAsync(_ => true, NoDeliveryWindow));
     }
 
     [Fact]
@@ -87,8 +90,9 @@ public sealed class NodesOutboxTests
 
         // Assert - one stored event, delivered through the outbox
         Assert.Equal(1, counter.Saved);
-        var probe = harness.GetConsumerHarness<CapacityReservedProbe>();
-        Assert.True(await probe.Consumed.Any<CapacityReserved>(m => m.Context.Message.ReservationToken == token));
+        var delivered = provider.GetRequiredService<DeliveredReservations>();
+        Assert.True(await delivered.WaitForAsync(t => t == token, DeliveryTimeout));
+        Assert.Equal(1, delivered.Count(token));
     }
 
     [Fact]
@@ -121,8 +125,9 @@ public sealed class NodesOutboxTests
         // Assert
         Assert.Equal(1, interceptor.Throws);
         Assert.Equal(1, counter.Saved);
-        var probe = harness.GetConsumerHarness<CapacityReservedProbe>();
-        Assert.True(await probe.Consumed.Any<CapacityReserved>(m => m.Context.Message.ReservationToken == token));
+        var delivered = provider.GetRequiredService<DeliveredReservations>();
+        Assert.True(await delivered.WaitForAsync(t => t == token, DeliveryTimeout));
+        Assert.Equal(1, delivered.Count(token));
 
         await using var verifyScope = provider.CreateAsyncScope();
         var verify = verifyScope.ServiceProvider.GetRequiredService<NodesDbContext>();
@@ -163,6 +168,7 @@ public sealed class NodesOutboxTests
             x.AddConsumer<CapacityReservedProbe>();
             NodesMessaging.AddNodesOutbox(x, o => o.UseSqlite());
         });
+        services.AddSingleton(new DeliveredReservations());
 
         var provider = services.BuildServiceProvider(validateScopes: true);
         using (var schemaScope = provider.CreateScope())
@@ -212,13 +218,60 @@ public sealed class NodesOutboxTests
     }
 
     /// <summary>Test-only consumer: proves the outbox delivered the event (harness.Published does not see outbox deliveries, F232).</summary>
-    // CA1812: MassTransit instantiates this consumer at runtime (AddConsumer / GetConsumerHarness); the analyzer cannot see that.
+    // CA1812: MassTransit instantiates this consumer at runtime (AddConsumer); the analyzer cannot see that.
 #pragma warning disable CA1812
     internal sealed class CapacityReservedProbe : IConsumer<CapacityReserved>
     {
-        public Task Consume(ConsumeContext<CapacityReserved> context) => Task.CompletedTask;
+        private readonly DeliveredReservations _delivered;
+
+        public CapacityReservedProbe(DeliveredReservations delivered) => _delivered = delivered;
+
+        public Task Consume(ConsumeContext<CapacityReserved> context)
+        {
+            _delivered.Add(context.Message.ReservationToken);
+            return Task.CompletedTask;
+        }
     }
 #pragma warning restore CA1812
+
+    /// <summary>Records every CapacityReserved token the probe consumed, so a test waits on delivery itself, not on harness inactivity (F351, D-ML348).</summary>
+    internal sealed class DeliveredReservations
+    {
+        private readonly ConcurrentQueue<Guid> _all = new();
+        private readonly Channel<Guid> _arrivals = Channel.CreateUnbounded<Guid>();
+
+        public void Add(Guid token)
+        {
+            _all.Enqueue(token);
+            _arrivals.Writer.TryWrite(token);
+        }
+
+        public int Count(Guid token) => _all.Count(t => t == token);
+
+        /// <summary>True once a consumed token matches; false when <paramref name="timeout"/> passes first.</summary>
+        public async Task<bool> WaitForAsync(Func<Guid, bool> match, TimeSpan timeout)
+        {
+            using var deadline = new CancellationTokenSource(timeout);
+            try
+            {
+                while (await _arrivals.Reader.WaitToReadAsync(deadline.Token))
+                {
+                    while (_arrivals.Reader.TryRead(out var token))
+                    {
+                        if (match(token))
+                        {
+                            return true;
+                        }
+                    }
+                }
+            }
+            catch (OperationCanceledException) when (deadline.IsCancellationRequested)
+            {
+            }
+
+            return false;
+        }
+    }
 
     /// <summary>Counts OutboxMessage rows added by saves that succeed, per context.</summary>
     private sealed class OutboxWriteCounter : SaveChangesInterceptor
