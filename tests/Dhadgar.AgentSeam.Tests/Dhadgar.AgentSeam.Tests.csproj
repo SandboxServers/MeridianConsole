@@ -32,6 +32,8 @@
     <ProjectReference Include="..\..\src\Dhadgar.Gateway\Dhadgar.Gateway.csproj" Aliases="gateway" />
     <!-- Identity's Program is aliased for the same reason as the Gateway's (D-S216). -->
     <ProjectReference Include="..\..\src\Dhadgar.Identity\Dhadgar.Identity.csproj" Aliases="identity" />
+    <!-- The CLI's Program is aliased for the same reason (D-S216). -->
+    <ProjectReference Include="..\..\src\Dhadgar.Cli\Dhadgar.Cli.csproj" Aliases="cli" />
   </ItemGroup>
 
   <ItemGroup>

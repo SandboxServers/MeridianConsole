@@ -138,3 +138,18 @@ public record NodeListItemResponse(
     int? HealthScore,
     int ActiveServers,
     IReadOnlyList<string> Tags);
+
+/// <summary>
+/// Filters applied to a node list query, echoed back in <see cref="Dhadgar.Contracts.FilteredPagedResponse{T}.Filters"/>.
+/// </summary>
+public record NodeListFilters(
+    string? Status,
+    string? Platform,
+    int? MinHealthScore,
+    int? MaxHealthScore,
+    bool? HasActiveServers,
+    string? Search,
+    IReadOnlyList<string>? Tags,
+    string SortBy,
+    string SortOrder,
+    bool IncludeDecommissioned);

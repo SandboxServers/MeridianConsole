@@ -1,7 +1,10 @@
+extern alias cli;
+
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Claims;
+using cli::Dhadgar.Cli.Infrastructure.Clients;
 using Dhadgar.Contracts.Nodes;
 using Dhadgar.Nodes.Auth;
 using Dhadgar.Nodes.Models;
@@ -10,6 +13,7 @@ using Dhadgar.Testing.Authentication;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.DependencyInjection;
+using Refit;
 
 namespace Dhadgar.AgentSeam.Tests;
 
@@ -65,6 +69,26 @@ public sealed class GatewayUserJwtSeamTests : IDisposable
         var page = await response.Content.ReadFromJsonAsync<PagedNodesResponse>();
         Assert.NotNull(page);
         Assert.Contains(harness.ForwardedRequests, r => r.ClusterId == "nodes" && r.Method == "GET" && r.Path == $"/organizations/{orgId}/nodes");
+    }
+
+    [Fact]
+    public async Task CliNodesApi_ThroughGateway_ListsEnrolledNode()
+    {
+        // F356: the CLI's own Refit interface, through the real Gateway, against real Nodes, with one node in the org.
+        using var harness = new GatewayNodesHarness(_caDirectory, realUserAuth: true);
+        var orgId = Guid.NewGuid();
+        var (enrolled, _) = await harness.EnrollThroughGatewayAsync(orgId);
+        using var client = harness.GatewayServer.CreateClient();
+        client.BaseAddress = new Uri(client.BaseAddress!, "/api/v1"); // the CLI's EffectiveNodesUrl shape: {gateway}/api/v1
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", SeamJwt.CreateUserToken(Guid.NewGuid(), orgId));
+        var api = RestService.For<INodesApi>(client); // default settings, as ApiClientFactory.CreateNodesClient
+
+        var page = await api.GetNodesAsync(orgId.ToString(), ct: CancellationToken.None);
+
+        Assert.IsType<Dhadgar.Contracts.FilteredPagedResponse<NodeListItemResponse>>(page);
+        var item = Assert.Single(page.Items, i => i.Id == enrolled.NodeId.ToString());
+        Assert.False(int.TryParse(item.Status, out _), "status is a number: " + item.Status);
+        Assert.True(Enum.TryParse<Dhadgar.Nodes.Data.Entities.NodeStatus>(item.Status, ignoreCase: false, out _), "status is not a NodeStatus name: " + item.Status);
     }
 
     [Fact]
