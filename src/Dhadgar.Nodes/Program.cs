@@ -7,6 +7,7 @@ using Dhadgar.Nodes.Consumers;
 using Dhadgar.Nodes.Data;
 using Dhadgar.Nodes.Endpoints;
 using Dhadgar.Nodes.Hubs;
+using Dhadgar.Nodes.Messaging;
 using Dhadgar.Nodes.Observability;
 using Dhadgar.Nodes.Services;
 using Dhadgar.Nodes.Services.CommandSigning;
@@ -137,19 +138,8 @@ builder.Services.AddMassTransit(x =>
         options.Tags.Add("messaging");
     });
 
-    // Configure Entity Framework Core outbox for transactional messaging
-    // This ensures DB commits and event publication are atomic
-    x.AddEntityFrameworkOutbox<NodesDbContext>(o =>
-    {
-        // Use PostgreSQL for the outbox
-        o.UsePostgres();
-
-        // Disable inbox for now (no consumers in core)
-        o.DisableInboxCleanupService();
-
-        // Query delay and delivery delay settings
-        o.QueryDelay = TimeSpan.FromSeconds(1);
-    });
+    // EF bus outbox on Postgres: publishes commit with the entity changes (see NodesMessaging)
+    NodesMessaging.AddNodesOutbox(x, o => o.UsePostgres());
 
     x.UsingRabbitMq((context, cfg) =>
     {

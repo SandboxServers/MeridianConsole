@@ -14,20 +14,17 @@ namespace Dhadgar.Nodes.Consumers;
 public sealed class CapacityReservedConsumer : IConsumer<CapacityReserved>
 {
     private readonly NodesDbContext _dbContext;
-    private readonly IPublishEndpoint _publishEndpoint;
     private readonly ILogger<CapacityReservedConsumer> _logger;
     private readonly NodesOptions _options;
     private readonly TimeProvider _timeProvider;
 
     public CapacityReservedConsumer(
         NodesDbContext dbContext,
-        IPublishEndpoint publishEndpoint,
         IOptions<NodesOptions> options,
         TimeProvider timeProvider,
         ILogger<CapacityReservedConsumer> logger)
     {
         _dbContext = dbContext;
-        _publishEndpoint = publishEndpoint;
         _options = options.Value;
         _timeProvider = timeProvider;
         _logger = logger;
@@ -52,10 +49,10 @@ public sealed class CapacityReservedConsumer : IConsumer<CapacityReserved>
         NodesMetrics.RecordCapacityReservation();
 
         // Check remaining capacity and alert if running low
-        await CheckAndAlertLowCapacityAsync(message.NodeId, context.CancellationToken);
+        await CheckAndAlertLowCapacityAsync(context, message.NodeId, context.CancellationToken);
     }
 
-    private async Task CheckAndAlertLowCapacityAsync(Guid nodeId, CancellationToken ct)
+    private async Task CheckAndAlertLowCapacityAsync(ConsumeContext<CapacityReserved> context, Guid nodeId, CancellationToken ct)
     {
         // Query the node with its capacity and hardware inventory
         var node = await _dbContext.Nodes
@@ -114,7 +111,8 @@ public sealed class CapacityReservedConsumer : IConsumer<CapacityReserved>
                 DiskUsagePercent: diskUsagePercent,
                 ThresholdPercent: threshold);
 
-            await _publishEndpoint.Publish(alertEvent, ct);
+            // Published through the consume context so the alert joins the bus outbox, not an injected endpoint
+            await context.Publish(alertEvent, ct);
 
             _logger.LogDebug(
                 "Published NodeCapacityLow alert for node {NodeId}",

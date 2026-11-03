@@ -131,7 +131,7 @@ public sealed class CapacityReservationService : ICapacityReservationService
 
             _dbContext.CapacityReservations.Add(reservation);
 
-            // Not transactional: Nodes has no UseBusOutbox (F117); fixed ids make a retried publish identical.
+            // Transactional: the EF bus outbox (NodesMessaging) stores this publish with the reservation and delivers it after commit; fixed ids keep a retried attempt identical.
             await _publishEndpoint.Publish(new CapacityReserved(
                 nodeId,
                 reservation.ReservationToken,

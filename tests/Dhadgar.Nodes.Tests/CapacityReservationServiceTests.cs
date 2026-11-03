@@ -769,7 +769,7 @@ public sealed class CapacityReservationServiceTests
     }
 
     /// <summary>Fails the first capacity reservation INSERT with a transient error, then lets every later command through.</summary>
-    private sealed class FailFirstInsertInterceptor : DbCommandInterceptor
+    internal sealed class FailFirstInsertInterceptor : DbCommandInterceptor
     {
         private int _throws;
 
@@ -807,7 +807,7 @@ public sealed class CapacityReservationServiceTests
     }
 
     /// <summary>Retries only <see cref="TransientTestException"/>, with no delay, so the test stays fast.</summary>
-    private sealed class TestRetryingStrategy : ExecutionStrategy
+    internal sealed class TestRetryingStrategy : ExecutionStrategy
     {
         public TestRetryingStrategy(ExecutionStrategyDependencies dependencies)
             : base(dependencies, maxRetryCount: 3, maxRetryDelay: TimeSpan.Zero)
