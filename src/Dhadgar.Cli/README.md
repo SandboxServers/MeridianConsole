@@ -1486,6 +1486,23 @@ dhadgar ping --url http://localhost:5010/healthz
 
 ---
 
+### Nodes List
+
+List the nodes of an organization. The response is the Contracts page (`FilteredPagedResponse<NodeListItemResponse>`), with paging by `page` and `pageSize`.
+
+```bash
+dhadgar nodes list --org org-123 --status Online --page 2 --page-size 20
+```
+
+| Option | Type | Description |
+| ------ | ---- | ----------- |
+| `--org` | string | Organization ID (defaults to current org) |
+| `--status` | string | Filter by status name (`Enrolling`, `Online`, `Degraded`, `Offline`, `Maintenance`, `Decommissioned`) |
+| `--page` | int | Page number, 1 or more (default 1) |
+| `--page-size` | int | Items per page, 1 to 100 (default 20) |
+
+---
+
 ## API Clients
 
 The CLI uses [Refit](https://github.com/reactiveui/refit) for type-safe REST API clients.

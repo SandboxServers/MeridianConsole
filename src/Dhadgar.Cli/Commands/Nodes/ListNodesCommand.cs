@@ -9,8 +9,8 @@ public sealed class ListNodesCommand
     public static async Task<int> ExecuteAsync(
         string? orgId,
         string? status,
-        int? skip,
-        int? take,
+        int? page,
+        int? pageSize,
         CancellationToken ct)
     {
         var config = CliConfig.Load();
@@ -38,7 +38,7 @@ public sealed class ListNodesCommand
 
         try
         {
-            var response = await nodesApi.GetNodesAsync(orgId, skip, take, status, ct);
+            var response = await nodesApi.GetNodesAsync(orgId, page, pageSize, status, ct);
             NodesCommandHelpers.WriteJson(response);
             return 0;
         }
