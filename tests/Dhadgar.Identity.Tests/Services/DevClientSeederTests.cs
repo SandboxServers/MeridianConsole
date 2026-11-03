@@ -5,6 +5,8 @@ using System.Text.Json;
 using Dhadgar.Contracts.Identity;
 using Dhadgar.Identity.Services;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using OpenIddict.Abstractions;
 using Xunit;
@@ -97,6 +99,41 @@ public sealed class DevClientSeederTests : IAsyncLifetime
         using var scope = _factory.Services.CreateScope();
         var manager = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
         Assert.Null(await manager.FindByClientIdAsync(clientId));
+    }
+
+    [Theory]
+    [InlineData("Production", false, false)]
+    [InlineData("Staging", false, false)]
+    [InlineData("Production", true, true)]
+    [InlineData("Development", false, true)]
+    [InlineData("Testing", false, true)]
+    public void ResolveAllowedOrganization_ConfiguredOrg_HonoursEnvironmentAndOverride(
+        string environmentName, bool allowOverride, bool expectsOrg)
+    {
+        var resolved = DevClientSeeder.ResolveAllowedOrganization(
+            OrgA, new StubHostEnvironment(environmentName), allowOverride, NullLogger.Instance);
+
+        Assert.Equal(expectsOrg ? OrgA : null, resolved);
+    }
+
+    [Theory]
+    [InlineData("Production")]
+    [InlineData("Development")]
+    [InlineData("Testing")]
+    public void ResolveAllowedOrganization_NullConfigured_ReturnsNull(string environmentName)
+    {
+        var resolved = DevClientSeeder.ResolveAllowedOrganization(
+            null, new StubHostEnvironment(environmentName), allowOverride: true, NullLogger.Instance);
+
+        Assert.Null(resolved);
+    }
+
+    private sealed class StubHostEnvironment(string environmentName) : IHostEnvironment
+    {
+        public string EnvironmentName { get; set; } = environmentName;
+        public string ApplicationName { get; set; } = "Dhadgar.Identity.Tests";
+        public string ContentRootPath { get; set; } = string.Empty;
+        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
     }
 
     private async Task<string> CreateClientAsync(Guid? organizationId)

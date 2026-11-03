@@ -922,16 +922,8 @@ static async Task SeedDevOpenIddictClientAsync(
     // Testing the binding is ignored unless the explicit override is set (F208). The reconcile below still runs
     // with null, which clears any binding left from an earlier start. The value itself is never logged.
     var allowOrganizationBinding = configuration.GetValue<bool?>("OpenIddict:DevClient:AllowOrganizationBinding") ?? false;
-    if (devClientOrganizationId is not null &&
-        !environment.IsDevelopment() &&
-        !environment.IsEnvironment("Testing") &&
-        !allowOrganizationBinding)
-    {
-        logger.LogWarning(
-            "OpenIddict:DevClient:OrganizationId is ignored outside Development and Testing; the dev client is seeded unbound. " +
-            "Set OpenIddict:DevClient:AllowOrganizationBinding=true to override.");
-        devClientOrganizationId = null;
-    }
+    devClientOrganizationId = DevClientSeeder.ResolveAllowedOrganization(
+        devClientOrganizationId, environment, allowOrganizationBinding, logger);
 
     using var scope = services.CreateScope();
     var manager = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();

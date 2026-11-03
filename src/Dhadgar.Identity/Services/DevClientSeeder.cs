@@ -1,4 +1,5 @@
 using Dhadgar.Shared.Results;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using OpenIddict.Abstractions;
 
@@ -9,6 +10,29 @@ namespace Dhadgar.Identity.Services;
 /// </summary>
 public static class DevClientSeeder
 {
+    /// <summary>
+    /// Returns the organization the dev client may be bound to: the configured value in Development and Testing,
+    /// or when <paramref name="allowOverride"/> is true; otherwise null (unbound), with a Warning naming the key only.
+    /// </summary>
+    public static Guid? ResolveAllowedOrganization(
+        Guid? configured, IHostEnvironment environment, bool allowOverride, ILogger logger)
+    {
+        ArgumentNullException.ThrowIfNull(environment);
+        ArgumentNullException.ThrowIfNull(logger);
+        if (configured is not null &&
+            !environment.IsDevelopment() &&
+            !environment.IsEnvironment("Testing") &&
+            !allowOverride)
+        {
+            logger.LogWarning(
+                "OpenIddict:DevClient:OrganizationId is ignored outside Development and Testing; the dev client is seeded unbound. " +
+                "Set OpenIddict:DevClient:AllowOrganizationBinding=true to override.");
+            return null;
+        }
+
+        return configured;
+    }
+
     /// <summary>
     /// Makes the stored binding of <paramref name="clientId"/> equal to <paramref name="organizationId"/>.
     /// Does nothing when the client does not exist or the binding already matches; otherwise updates the application.
