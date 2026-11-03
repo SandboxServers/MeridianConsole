@@ -31,6 +31,19 @@ public class BindingFailureProblemTests
         problem.Title.Should().Be(title);
     }
 
+    [Theory]
+    [InlineData(400, "https://meridian.console/errors/bad-request")]
+    [InlineData(405, "https://meridian.console/errors/method-not-allowed")]
+    [InlineData(408, "https://meridian.console/errors/request-timeout")]
+    [InlineData(413, "https://meridian.console/errors/payload-too-large")]
+    [InlineData(415, "https://meridian.console/errors/unsupported-media-type")]
+    [InlineData(431, "https://meridian.console/errors/request-header-fields-too-large")]
+    [InlineData(418, "https://meridian.console/errors/bad-request")]
+    public void ProblemTypeTable_KnownStatuses_KeepTheirTypes(int statusCode, string type)
+    {
+        ProblemTypeTable.Describe(statusCode).Type.Should().Be(type);
+    }
+
     [Fact]
     public void TryCreate_Status500_IsNotHandled()
     {

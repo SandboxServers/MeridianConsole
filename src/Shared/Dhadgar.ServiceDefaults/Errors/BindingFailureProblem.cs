@@ -21,7 +21,6 @@ public static class BindingFailureProblem
     /// <summary>Event id for the binding-failure log entry. It never carries "Unhandled exception" text.</summary>
     public static readonly EventId EventId = new(9301, "BindingFailure");
 
-    private const string BadRequestType = "https://meridian.console/errors/bad-request";
     private const string FixedDetail = "The request could not be read.";
 
     /// <summary>
@@ -45,7 +44,7 @@ public static class BindingFailureProblem
         }
 
         var statusCode = badRequest.StatusCode;
-        var (type, title) = Describe(statusCode);
+        var (type, title) = ProblemTypeTable.Describe(statusCode);
         var includeDetails = env.IsDevelopment() || env.IsEnvironment("Testing");
 
         problem = new ProblemDetails
@@ -68,17 +67,4 @@ public static class BindingFailureProblem
     public static void Log(ILogger logger, int statusCode, PathString path, string traceId) =>
         logger.LogWarning(EventId, "Request rejected at binding. StatusCode: {StatusCode}, Path: {Path}, TraceId: {TraceId}",
             statusCode, path, traceId);
-
-    private static (string Type, string Title) Describe(int statusCode)
-    {
-        return statusCode switch
-        {
-            400 => (BadRequestType, "Bad Request"),
-            408 => ("https://meridian.console/errors/request-timeout", "Request Timeout"),
-            413 => ("https://meridian.console/errors/payload-too-large", "Payload Too Large"),
-            415 => ("https://meridian.console/errors/unsupported-media-type", "Unsupported Media Type"),
-            431 => ("https://meridian.console/errors/request-header-fields-too-large", "Request Header Fields Too Large"),
-            _ => (BadRequestType, "Bad Request")
-        };
-    }
 }

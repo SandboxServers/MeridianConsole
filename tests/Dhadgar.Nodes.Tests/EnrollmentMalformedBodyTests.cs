@@ -21,6 +21,7 @@ public sealed class EnrollmentMalformedBodyTests
 {
     private const string EnrollRoute = "/agents/enroll";
     private const string BadRequestType = "https://meridian.console/errors/bad-request";
+    private const string UnsupportedMediaTypeType = "https://meridian.console/errors/unsupported-media-type";
 
     [Theory]
     [InlineData("")]
@@ -46,5 +47,29 @@ public sealed class EnrollmentMalformedBodyTests
         var json = await response.Content.ReadAsStringAsync();
         using var document = JsonDocument.Parse(json);
         Assert.Equal(BadRequestType, document.RootElement.GetProperty("type").GetString());
+    }
+
+    [Theory]
+    [InlineData("text/plain")]
+    [InlineData("application/xml")]
+    [InlineData("application/x-www-form-urlencoded")]
+    public async Task Enroll_WrongContentType_Returns415ProblemJson(string mediaType)
+    {
+        using var baseFactory = new NodesWebApplicationFactory();
+        using var factory = baseFactory.WithWebHostBuilder(builder =>
+            builder.ConfigureTestServices(services =>
+                services.Configure<RouteHandlerOptions>(options => options.ThrowOnBadRequest = true)));
+        using var client = factory.CreateClient();
+        using var content = new StringContent("{\"token\":\"x\"}", Encoding.UTF8, mediaType);
+
+        using var response = await client.PostAsync(EnrollRoute, content);
+
+        Assert.Equal(HttpStatusCode.UnsupportedMediaType, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+
+        var json = await response.Content.ReadAsStringAsync();
+        using var document = JsonDocument.Parse(json);
+        Assert.Equal(UnsupportedMediaTypeType, document.RootElement.GetProperty("type").GetString());
+        Assert.Equal(415, document.RootElement.GetProperty("status").GetInt32());
     }
 }

@@ -1,5 +1,8 @@
+using System.Net;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using System.Text;
+using System.Text.Json;
 using Dhadgar.Nodes.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -30,6 +33,23 @@ public sealed class GatewayAgentEnrollmentSeamTests : IDisposable
         {
             // best-effort cleanup
         }
+    }
+
+    [Fact]
+    public async Task EnrollWrongContentType_ThroughGateway_Returns415ProblemJson()
+    {
+        // F357: routing's 415 must reach the agent as problem+json, through the real Gateway.
+        using var harness = new GatewayNodesHarness(_caDirectory);
+        using var client = harness.GatewayServer.CreateClient();
+        using var content = new StringContent("{\"enrollmentToken\":\"x\"}", Encoding.UTF8, "text/plain");
+
+        using var response = await client.PostAsync("/api/v1/agents/enroll", content);
+
+        Assert.Equal(HttpStatusCode.UnsupportedMediaType, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("https://meridian.console/errors/unsupported-media-type", doc.RootElement.GetProperty("type").GetString());
+        Assert.Equal(415, doc.RootElement.GetProperty("status").GetInt32());
     }
 
     [Fact]
