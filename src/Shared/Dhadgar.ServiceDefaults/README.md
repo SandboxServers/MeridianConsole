@@ -449,6 +449,7 @@ A `BadHttpRequestException` with a 4xx status (malformed JSON, wrong JSON type, 
 | `StatusCode` | `type` | `title` |
 | --- | --- | --- |
 | 400 | `https://meridian.console/errors/bad-request` | `Bad Request` |
+| 405 | `https://meridian.console/errors/method-not-allowed` | `Method Not Allowed` |
 | 408 | `https://meridian.console/errors/request-timeout` | `Request Timeout` |
 | 413 | `https://meridian.console/errors/payload-too-large` | `Payload Too Large` |
 | 415 | `https://meridian.console/errors/unsupported-media-type` | `Unsupported Media Type` |
@@ -459,6 +460,7 @@ A `BadHttpRequestException` with a 4xx status (malformed JSON, wrong JSON type, 
 - No `stackTrace` extension is ever included for a 4xx.
 - A binding failure is logged at Warning with event id `9301` (`BindingFailure`), with no exception message and no stack trace. Its text never contains `Unhandled exception`.
 - Any other exception still answers 500 and is logged as `Unhandled exception (fallback handler)`.
+- `UseDhadgarStatusCodeProblems()` (F357) answers routing's 405 and 415, which write no body, as problem+json with the same table. It is opt-in per service and must come before `UseAuthentication()`.
 
 ---
 

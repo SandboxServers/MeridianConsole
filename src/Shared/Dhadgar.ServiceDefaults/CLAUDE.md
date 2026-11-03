@@ -9,6 +9,7 @@ Common service wiring, middleware, and observability.
 ## Contents
 - `CorrelationMiddleware` - Request/trace ID tracking
 - `ProblemDetailsMiddleware` - RFC 7807 error responses
+- `UseDhadgarStatusCodeProblems` - 405/415 from routing as problem+json (opt-in per service)
 - `RequestLoggingMiddleware` - HTTP request/response logging
 - OpenTelemetry configuration
 

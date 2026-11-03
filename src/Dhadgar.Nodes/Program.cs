@@ -12,6 +12,7 @@ using Dhadgar.Nodes.Observability;
 using Dhadgar.Nodes.Services;
 using Dhadgar.Nodes.Services.CommandSigning;
 using Dhadgar.ServiceDefaults;
+using Dhadgar.ServiceDefaults.Errors;
 using Dhadgar.ServiceDefaults.Extensions;
 using Dhadgar.ServiceDefaults.Security;
 using Dhadgar.ServiceDefaults.Swagger;
@@ -181,6 +182,9 @@ app.UseMeridianSwagger();
 
 // Dhadgar middleware pipeline (correlation, tenant enrichment, problem details, request logging)
 app.UseDhadgarMiddleware();
+
+// F357: routing 415/405 answer problem+json
+app.UseDhadgarStatusCodeProblems();
 
 // Authentication and authorization
 app.UseAuthentication();
