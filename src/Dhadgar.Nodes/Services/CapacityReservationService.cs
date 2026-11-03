@@ -51,8 +51,9 @@ public sealed class CapacityReservationService : ICapacityReservationService
         {
             if (attempt++ > 0)
             {
-                // A failed attempt left its reservation (and the node it read) tracked; start the retry clean.
-                _dbContext.ChangeTracker.Clear();
+                // A failed attempt left its reservation, the node it read and its outbox message tracked; start the retry clean,
+                // but keep the outbox state MassTransit cached for this scope (NodesChangeTrackerExtensions.ResetForRetry).
+                _dbContext.ResetForRetry();
             }
 
             // Use serializable transaction to prevent concurrent overbooking
