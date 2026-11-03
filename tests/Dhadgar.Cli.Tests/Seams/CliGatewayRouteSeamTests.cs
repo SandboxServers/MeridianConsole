@@ -108,7 +108,7 @@ public sealed class CliGatewayRouteSeamTests
     public void NodesList_ReturnType_IsTheContractsPage()
     {
         typeof(INodesApi).GetMethod(nameof(INodesApi.GetNodesAsync))!.ReturnType
-            .Should().Be(typeof(Task<Dhadgar.Contracts.FilteredPagedResponse<Dhadgar.Contracts.Nodes.NodeListItemResponse>>));
+            .Should().Be<Task<Dhadgar.Contracts.FilteredPagedResponse<Dhadgar.Contracts.Nodes.NodeListItemResponse>>>();
     }
 
     private sealed class CaptureHandler : HttpMessageHandler
