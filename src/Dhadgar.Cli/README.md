@@ -199,7 +199,7 @@ Configuration is stored in `~/.dhadgar/config.json`:
 - **Windows**: `C:\Users\<username>\.dhadgar\config.json`
 - **Linux/macOS**: `/home/<username>/.dhadgar/config.json`
 
-The file is created automatically on first run with default values.
+The file is created automatically on first run. It contains only `gateway_url`; every other URL falls back to the Gateway defaults below.
 
 ### Configuration Options
 
@@ -218,7 +218,8 @@ The file is created automatically on first run with default values.
 | Field | Description | Default |
 |-------|-------------|---------|
 | `gateway_url` | Base URL for the YARP Gateway | `http://localhost:5000` |
-| `identity_url` | Direct URL for Identity service (dev mode) | `http://localhost:5010` |
+| `identity_url` | Direct URL for Identity service (bypasses the Gateway) | `{gateway_url}/api/v1/identity` |
+| `nodes_url` | Direct URL for Nodes service (bypasses the Gateway) | `{gateway_url}/api/v1` |
 | `secrets_url` | Direct URL for Secrets service (dev mode) | `http://localhost:5110` |
 | `access_token` | Current OAuth access token | (none) |
 | `refresh_token` | OAuth refresh token for token renewal | (none) |
@@ -232,10 +233,13 @@ The CLI computes effective URLs based on configuration:
 ```csharp
 // Routes through gateway by default
 EffectiveIdentityUrl = IdentityUrl ?? $"{GatewayUrl}/api/v1/identity"
-EffectiveSecretsUrl = SecretsUrl ?? $"{GatewayUrl}/api/v1/secrets"
+EffectiveNodesUrl = NodesUrl ?? $"{GatewayUrl}/api/v1"
+EffectiveSecretsUrl = SecretsUrl ?? $"{GatewayUrl}/secrets"
 ```
 
-For local development, you can override URLs to bypass the gateway:
+The token request goes to `{gateway_url}/api/v1/identity/connect/token`, and the node list to `{gateway_url}/api/v1/organizations/{org}/nodes`. The Gateway strips the `/api/v1/identity` or `/api/v1` prefix before forwarding, so the services see `/connect/token` and `/organizations/{org}/nodes`.
+
+To bypass the Gateway for a service, set its URL explicitly:
 
 ```json
 {
@@ -244,6 +248,8 @@ For local development, you can override URLs to bypass the gateway:
   "secrets_url": "http://localhost:5110"
 }
 ```
+
+**Upgrading:** a config file written by an earlier CLI may still contain `identity_url` (for example `http://localhost:5010`). Login then bypasses the Gateway. To go through the Gateway, remove `identity_url` from `~/.dhadgar/config.json`. Existing files are not rewritten.
 
 ### Authentication State
 
@@ -469,6 +475,7 @@ dhadgar auth login --identity-url http://identity.example.com
 - Client secret is hidden during interactive input
 - Stores tokens in `~/.dhadgar/config.json`
 - Shows success panel with token expiration time
+- Exit code 0 and "Authenticated" only when this run's token request succeeded and was saved. Otherwise exit code 1, and the stored token is left untouched. A failed login never reuses an older token that is still valid.
 
 #### `dhadgar auth status`
 

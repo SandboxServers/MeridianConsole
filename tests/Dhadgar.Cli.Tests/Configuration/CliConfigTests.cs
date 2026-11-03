@@ -1,9 +1,11 @@
+using System.Text.Json;
 using Dhadgar.Cli.Configuration;
 using FluentAssertions;
 using Xunit;
 
 namespace Dhadgar.Cli.Tests.Configuration;
 
+[Collection("CliConfig")]
 public class CliConfigTests
 {
     [Fact]
@@ -99,7 +101,19 @@ public class CliConfigTests
             GatewayUrl = "http://my-gateway:8080"
         };
 
-        config.EffectiveIdentityUrl.Should().Be("http://my-gateway:8080/identity");
+        config.EffectiveIdentityUrl.Should().Be("http://my-gateway:8080/api/v1/identity");
+    }
+
+    [Fact]
+    public void EffectiveNodesUrl_WithoutExplicitUrl_ReturnsGatewayApiV1Url()
+    {
+        var config = new CliConfig
+        {
+            NodesUrl = null,
+            GatewayUrl = "http://my-gateway:8080/"
+        };
+
+        config.EffectiveNodesUrl.Should().Be("http://my-gateway:8080/api/v1");
     }
 
     [Fact]
@@ -111,7 +125,7 @@ public class CliConfigTests
             GatewayUrl = "http://my-gateway:8080/"
         };
 
-        config.EffectiveIdentityUrl.Should().Be("http://my-gateway:8080/identity");
+        config.EffectiveIdentityUrl.Should().Be("http://my-gateway:8080/api/v1/identity");
     }
 
     [Fact]
@@ -123,7 +137,29 @@ public class CliConfigTests
             GatewayUrl = null
         };
 
-        config.EffectiveIdentityUrl.Should().Be("http://localhost:5000/identity");
+        config.EffectiveIdentityUrl.Should().Be("http://localhost:5000/api/v1/identity");
+    }
+
+    [Fact]
+    public void Load_FirstRun_WritesGatewayUrlOnly()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "dhadgar-cli-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        CliConfig.ConfigDirectoryOverride = directory;
+
+        try
+        {
+            var config = CliConfig.Load();
+
+            config.GatewayUrl.Should().Be("http://localhost:5000");
+            using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(directory, "config.json")));
+            document.RootElement.EnumerateObject().Select(property => property.Name).Should().Equal("gateway_url");
+        }
+        finally
+        {
+            CliConfig.ConfigDirectoryOverride = null;
+            Directory.Delete(directory, recursive: true);
+        }
     }
 
     [Fact]
