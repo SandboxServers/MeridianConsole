@@ -51,6 +51,21 @@ public sealed class GlobalExceptionHandler : IExceptionHandler
             ?? httpContext.TraceIdentifier
             ?? "unknown";
 
+        // D-ML233: binding failures answer their own 4xx as problem+json, before the unhandled-exception log
+        if (BindingFailureProblem.TryCreate(exception, httpContext, _environment, traceId, correlationId,
+                _timeProvider.GetUtcNow(), out var bindingProblem))
+        {
+            var bindingStatus = bindingProblem.Status ?? StatusCodes.Status400BadRequest;
+            BindingFailureProblem.Log(_logger, bindingStatus, httpContext.Request.Path, traceId);
+
+            httpContext.Response.StatusCode = bindingStatus;
+            httpContext.Response.ContentType = "application/problem+json";
+
+            var bindingJson = JsonSerializer.Serialize(bindingProblem, JsonOptions);
+            await httpContext.Response.WriteAsync(bindingJson, cancellationToken);
+            return true;
+        }
+
         // Classify exception to status code and type
         var (statusCode, errorType, title) = ClassifyException(exception);
 

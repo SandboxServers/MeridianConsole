@@ -442,6 +442,24 @@ if (context.Response.HasStarted)
 }
 ```
 
+**Binding Failures (D-ML107)**:
+
+A `BadHttpRequestException` with a 4xx status (malformed JSON, wrong JSON type, oversized or unsupported body) is a client error. It is answered as `application/problem+json` with the exception's own status, and it is never logged as an unhandled exception. `GlobalExceptionHandler` answers the same way. The error shape is unchanged (`traceId`, `correlationId` and `timestamp` extensions).
+
+| `StatusCode` | `type` | `title` |
+| --- | --- | --- |
+| 400 | `https://meridian.console/errors/bad-request` | `Bad Request` |
+| 408 | `https://meridian.console/errors/request-timeout` | `Request Timeout` |
+| 413 | `https://meridian.console/errors/payload-too-large` | `Payload Too Large` |
+| 415 | `https://meridian.console/errors/unsupported-media-type` | `Unsupported Media Type` |
+| 431 | `https://meridian.console/errors/request-header-fields-too-large` | `Request Header Fields Too Large` |
+| any other 4xx | `https://meridian.console/errors/bad-request` | `Bad Request` |
+
+- `detail` is the exception message in Development and Testing. Elsewhere it is the fixed text `The request could not be read.`
+- No `stackTrace` extension is ever included for a 4xx.
+- A binding failure is logged at Warning with event id `9301` (`BindingFailure`), with no exception message and no stack trace. Its text never contains `Unhandled exception`.
+- Any other exception still answers 500 and is logged as `Unhandled exception (fallback handler)`.
+
 ---
 
 ### RequestLoggingMiddleware

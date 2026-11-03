@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Dhadgar.ServiceDefaults.Errors;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Hosting;
@@ -77,6 +78,21 @@ public sealed class ProblemDetailsMiddleware
         var correlationId = context.Items["CorrelationId"]?.ToString()
             ?? context.TraceIdentifier
             ?? "unknown";
+
+        // D-ML233: a binding failure (BadHttpRequestException, 4xx) is a client error, not an unhandled exception
+        if (BindingFailureProblem.TryCreate(exception, context, _environment, traceId, correlationId,
+                _timeProvider.GetUtcNow(), out var bindingProblem))
+        {
+            var bindingStatus = bindingProblem.Status ?? StatusCodes.Status400BadRequest;
+            BindingFailureProblem.Log(_logger, bindingStatus, context.Request.Path, traceId);
+
+            context.Response.StatusCode = bindingStatus;
+            context.Response.ContentType = "application/problem+json";
+
+            var bindingJson = JsonSerializer.Serialize(bindingProblem, JsonOptions);
+            await context.Response.WriteAsync(bindingJson, context.RequestAborted);
+            return;
+        }
 
         _logger.LogError(exception,
             "Unhandled exception (fallback handler). TraceId: {TraceId}, CorrelationId: {CorrelationId}, Path: {Path}",
