@@ -100,7 +100,7 @@ public sealed class NodesApiIntegrationTests
         var response = await client.GetAsync($"/organizations/{orgId}/nodes");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var result = await response.Content.ReadFromJsonAsync<Dhadgar.Nodes.Models.FilteredPagedResponse<NodeListItem>>();
+        var result = await response.Content.ReadFromJsonAsync<Dhadgar.Contracts.FilteredPagedResponse<Dhadgar.Contracts.Nodes.NodeListItemResponse>>();
         Assert.NotNull(result);
         Assert.Empty(result.Items);
         Assert.Equal(0, result.Total);
@@ -116,10 +116,25 @@ public sealed class NodesApiIntegrationTests
         var response = await client.GetAsync($"/organizations/{orgId}/nodes");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var result = await response.Content.ReadFromJsonAsync<Dhadgar.Nodes.Models.FilteredPagedResponse<NodeListItem>>();
+        var result = await response.Content.ReadFromJsonAsync<Dhadgar.Contracts.FilteredPagedResponse<Dhadgar.Contracts.Nodes.NodeListItemResponse>>();
         Assert.NotNull(result);
         Assert.Equal(3, result.Items.Count);
         Assert.Equal(3, result.Total);
+    }
+
+    [Fact]
+    public async Task ListNodes_WithNodes_StatusIsTheEnumName()
+    {
+        var orgId = Guid.NewGuid();
+        await _factory.SeedNodeAsync(orgId, "status-name", NodeStatus.Online);
+        using var client = _factory.CreateAuthenticatedClient(TestUserId, orgId);
+
+        var response = await client.GetAsync($"/organizations/{orgId}/nodes");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var result = await response.Content.ReadFromJsonAsync<Dhadgar.Contracts.FilteredPagedResponse<Dhadgar.Contracts.Nodes.NodeListItemResponse>>();
+        Assert.NotNull(result);
+        Assert.Equal("Online", Assert.Single(result.Items).Status);
     }
 
     [Fact]
@@ -132,7 +147,7 @@ public sealed class NodesApiIntegrationTests
         var response = await client.GetAsync($"/organizations/{orgId}/nodes?page=1&pageSize=3");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var result = await response.Content.ReadFromJsonAsync<Dhadgar.Nodes.Models.FilteredPagedResponse<NodeListItem>>();
+        var result = await response.Content.ReadFromJsonAsync<Dhadgar.Contracts.FilteredPagedResponse<Dhadgar.Contracts.Nodes.NodeListItemResponse>>();
         Assert.NotNull(result);
         Assert.Equal(3, result.Items.Count);
         Assert.Equal(10, result.Total);
@@ -150,11 +165,11 @@ public sealed class NodesApiIntegrationTests
         var response = await client.GetAsync($"/organizations/{orgId}/nodes/{node.Id}");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var result = await response.Content.ReadFromJsonAsync<NodeDetail>();
+        var result = await response.Content.ReadFromJsonAsync<Dhadgar.Contracts.Nodes.NodeDetailResponse>();
         Assert.NotNull(result);
-        Assert.Equal(node.Id, result.Id);
+        Assert.Equal(node.Id.ToString(), result.Id);
         Assert.Equal("my-server", result.Name);
-        Assert.Equal(orgId, result.OrganizationId);
+        Assert.Equal(orgId.ToString(), result.OrganizationId);
     }
 
     [Fact]
@@ -195,7 +210,7 @@ public sealed class NodesApiIntegrationTests
             $"/organizations/{orgId}/nodes/{node.Id}", request);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var result = await response.Content.ReadFromJsonAsync<NodeDetail>();
+        var result = await response.Content.ReadFromJsonAsync<Dhadgar.Contracts.Nodes.NodeDetailResponse>();
         Assert.NotNull(result);
         Assert.Equal("updated-name", result.Name);
         Assert.Equal("Updated Display Name", result.DisplayName);
@@ -245,9 +260,9 @@ public sealed class NodesApiIntegrationTests
 
         // Verify node is in maintenance
         var getResponse = await client.GetAsync($"/organizations/{orgId}/nodes/{node.Id}");
-        var result = await getResponse.Content.ReadFromJsonAsync<NodeDetail>();
+        var result = await getResponse.Content.ReadFromJsonAsync<Dhadgar.Contracts.Nodes.NodeDetailResponse>();
         Assert.NotNull(result);
-        Assert.Equal(NodeStatus.Maintenance, result.Status);
+        Assert.Equal(nameof(NodeStatus.Maintenance), result.Status);
     }
 
     [Fact]
@@ -277,9 +292,9 @@ public sealed class NodesApiIntegrationTests
 
         // Verify node is out of maintenance
         var getResponse = await client.GetAsync($"/organizations/{orgId}/nodes/{node.Id}");
-        var result = await getResponse.Content.ReadFromJsonAsync<NodeDetail>();
+        var result = await getResponse.Content.ReadFromJsonAsync<Dhadgar.Contracts.Nodes.NodeDetailResponse>();
         Assert.NotNull(result);
-        Assert.NotEqual(NodeStatus.Maintenance, result.Status);
+        Assert.NotEqual(nameof(NodeStatus.Maintenance), result.Status);
     }
 
     [Fact]

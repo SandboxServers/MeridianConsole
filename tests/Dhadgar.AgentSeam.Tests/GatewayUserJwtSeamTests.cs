@@ -60,14 +60,16 @@ public sealed class GatewayUserJwtSeamTests : IDisposable
     {
         using var harness = new GatewayNodesHarness(_caDirectory, realUserAuth: true);
         var orgId = Guid.NewGuid();
+        var (enrolled, _) = await harness.EnrollThroughGatewayAsync(orgId);
         using var client = harness.GatewayServer.CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", SeamJwt.CreateUserToken(Guid.NewGuid(), orgId));
 
         using var response = await client.GetAsync($"/api/v1/organizations/{orgId}/nodes");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var page = await response.Content.ReadFromJsonAsync<PagedNodesResponse>();
+        var page = await response.Content.ReadFromJsonAsync<Dhadgar.Contracts.FilteredPagedResponse<NodeListItemResponse>>();
         Assert.NotNull(page);
+        Assert.Contains(page.Items, i => i.Id == enrolled.NodeId.ToString());
         Assert.Contains(harness.ForwardedRequests, r => r.ClusterId == "nodes" && r.Method == "GET" && r.Path == $"/organizations/{orgId}/nodes");
     }
 

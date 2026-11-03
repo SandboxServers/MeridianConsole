@@ -17,20 +17,20 @@ public static class NodesEndpoints
             .WithDescription("List all nodes for an organization with filtering, sorting, and pagination. " +
                 "Supports filtering by status, platform, health score range, active servers, tags, and full-text search.")
             .WithSummary("List nodes")
-            .Produces<FilteredPagedResponse<NodeListItem>>();
+            .Produces<Dhadgar.Contracts.FilteredPagedResponse<Dhadgar.Contracts.Nodes.NodeListItemResponse>>();
 
         group.MapGet("/{nodeId:guid}", GetNode)
             .WithName("GetNode")
             .WithDescription("Get node details by ID")
             .WithSummary("Get node")
-            .Produces<NodeDetail>()
+            .Produces<Dhadgar.Contracts.Nodes.NodeDetailResponse>()
             .ProducesProblem(404);
 
         group.MapPatch("/{nodeId:guid}", UpdateNode)
             .WithName("UpdateNode")
             .WithDescription("Update node properties (name, displayName)")
             .WithSummary("Update node")
-            .Produces<NodeDetail>()
+            .Produces<Dhadgar.Contracts.Nodes.NodeDetailResponse>()
             .ProducesProblem(400)
             .ProducesProblem(404);
 
@@ -38,7 +38,7 @@ public static class NodesEndpoints
             .WithName("UpdateNodeTags")
             .WithDescription("Update node tags (replaces all existing tags)")
             .WithSummary("Update node tags")
-            .Produces<NodeDetail>()
+            .Produces<Dhadgar.Contracts.Nodes.NodeDetailResponse>()
             .ProducesProblem(400)
             .ProducesProblem(404);
 
@@ -99,7 +99,7 @@ public static class NodesEndpoints
             IncludeDecommissioned = includeDecommissioned
         };
         var result = await nodeService.GetNodesAsync(organizationId, query, ct);
-        return Results.Ok(result);
+        return Results.Ok(NodeContractMapper.ToContract(result));
     }
 
     private static async Task<IResult> GetNode(
@@ -115,7 +115,7 @@ public static class NodesEndpoints
             return ProblemDetailsHelper.NotFound(result.Error ?? "node_not_found");
         }
 
-        return Results.Ok(result.Value);
+        return Results.Ok(NodeContractMapper.ToContract(result.Value));
     }
 
     private static async Task<IResult> UpdateNode(
@@ -134,7 +134,7 @@ public static class NodesEndpoints
                 : ProblemDetailsHelper.BadRequest(result.Error ?? "update_failed");
         }
 
-        return Results.Ok(result.Value);
+        return Results.Ok(NodeContractMapper.ToContract(result.Value));
     }
 
     private static async Task<IResult> UpdateNodeTags(
@@ -153,7 +153,7 @@ public static class NodesEndpoints
                 : ProblemDetailsHelper.BadRequest(result.Error ?? "update_failed");
         }
 
-        return Results.Ok(result.Value);
+        return Results.Ok(NodeContractMapper.ToContract(result.Value));
     }
 
     private static async Task<IResult> DecommissionNode(
