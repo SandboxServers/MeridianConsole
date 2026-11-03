@@ -1866,7 +1866,9 @@ export DHADGAR_CLI_DEBUG=1
 | Code | Meaning |
 |------|---------|
 | 0 | Success |
-| 1 | General error (authentication, API error, invalid input) |
+| 1 | General error (not authenticated, API error, network error, invalid input) |
+
+Every command returns its exit code to the shell. Argument parse errors keep System.CommandLine's own codes (1 or 2).
 
 Commands return meaningful exit codes for scripting:
 

@@ -5,11 +5,14 @@ namespace Dhadgar.Cli.Configuration;
 
 public sealed class CliConfig
 {
-    private static readonly string ConfigDirectory = Path.Combine(
+    /// <summary>Test seam: when set, the config directory is this path instead of ~/.dhadgar.</summary>
+    internal static string? ConfigDirectoryOverride { get; set; }
+
+    private static string ConfigDirectory => ConfigDirectoryOverride ?? Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
         ".dhadgar");
 
-    private static readonly string ConfigFilePath = Path.Combine(ConfigDirectory, "config.json");
+    private static string ConfigFilePath => Path.Combine(ConfigDirectory, "config.json");
     private static readonly JsonSerializerOptions SaveOptions = new()
     {
         WriteIndented = true,
