@@ -103,7 +103,8 @@ public sealed class GatewayNodesHarness : IDisposable
     /// <summary>Creates both hosts, writing the CA material to <paramref name="caDirectory"/>.</summary>
     /// <param name="caDirectory">Directory for CA material. The caller owns cleanup.</param>
     /// <param name="realUserAuth">When true, Nodes and the Gateway validate user JWTs from <see cref="SeamJwt"/> through their own default schemes instead of the test scheme.</param>
-    public GatewayNodesHarness(string caDirectory, bool realUserAuth = false)
+    /// <param name="userJwt">Overrides the JWT configuration applied when <paramref name="realUserAuth"/> is true. Null uses <see cref="SeamJwt.Apply"/>.</param>
+    public GatewayNodesHarness(string caDirectory, bool realUserAuth = false, Action<IServiceCollection>? userJwt = null)
     {
         NodesBase = new NodesWebApplicationFactory();
         var nodes = AgentSeamHarness.CreateFactoryWithRealCa(
@@ -126,12 +127,12 @@ public sealed class GatewayNodesHarness : IDisposable
                     options.DefaultAuthenticateScheme = null;
                     options.DefaultChallengeScheme = null;
                 });
-                SeamJwt.Apply(services);
+                (userJwt ?? SeamJwt.Apply)(services);
             }));
         }
 
         _nodes = nodes;
-        _gateway = new GatewayTestFactory(_nodes.Server, realUserAuth ? SeamJwt.Apply : null);
+        _gateway = new GatewayTestFactory(_nodes.Server, realUserAuth ? (userJwt ?? SeamJwt.Apply) : null);
     }
 
     /// <summary>The Nodes factory the harness was built from. Its <c>TimeProvider</c> is the fake clock.</summary>
