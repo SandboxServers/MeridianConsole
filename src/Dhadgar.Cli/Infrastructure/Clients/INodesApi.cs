@@ -15,10 +15,10 @@ public interface INodesApi
     // ========================================================================
 
     [Get("/organizations/{orgId}/nodes")]
-    Task<PagedNodesResponse> GetNodesAsync(
+    Task<Dhadgar.Contracts.FilteredPagedResponse<NodeListItemResponse>> GetNodesAsync(
         string orgId,
-        [AliasAs("skip")] int? skip = null,
-        [AliasAs("take")] int? take = null,
+        [AliasAs("page")] int? page = null,
+        [AliasAs("pageSize")] int? pageSize = null,
         [AliasAs("status")] string? status = null,
         CancellationToken ct = default);
 
@@ -36,10 +36,10 @@ public interface INodesApi
     Task DecommissionNodeAsync(string orgId, string nodeId, CancellationToken ct = default);
 
     [Post("/organizations/{orgId}/nodes/{nodeId}/maintenance")]
-    Task<NodeDetailResponse> EnterMaintenanceAsync(string orgId, string nodeId, CancellationToken ct = default);
+    Task EnterMaintenanceAsync(string orgId, string nodeId, CancellationToken ct = default);
 
     [Delete("/organizations/{orgId}/nodes/{nodeId}/maintenance")]
-    Task<NodeDetailResponse> ExitMaintenanceAsync(string orgId, string nodeId, CancellationToken ct = default);
+    Task ExitMaintenanceAsync(string orgId, string nodeId, CancellationToken ct = default);
 
     // ========================================================================
     // Enrollment Token Management (User-facing)

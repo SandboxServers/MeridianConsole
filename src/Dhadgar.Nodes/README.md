@@ -260,6 +260,8 @@ src/Dhadgar.Nodes/
 | `page` | int | Page number (default: 1) |
 | `pageSize` | int | Items per page (default: 20, max: 100) |
 
+**Responses:** the list answers `Dhadgar.Contracts.FilteredPagedResponse<Dhadgar.Contracts.Nodes.NodeListItemResponse>`, and detail, update and tag replacement answer `Dhadgar.Contracts.Nodes.NodeDetailResponse`. `status` is the `NodeStatus` enum name (for example `Online`), and paging is `page` and `pageSize`.
+
 ### Enrollment Tokens
 
 **Base path:** `/api/v1/organizations/{organizationId}/enrollment`

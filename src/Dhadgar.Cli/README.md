@@ -25,6 +25,7 @@ Built with [Spectre.Console](https://spectreconsole.net/) for gorgeous terminal 
    - [Key Vault Commands](#key-vault-commands)
    - [Gateway Commands](#gateway-commands)
    - [Utility Commands](#utility-commands)
+   - [Nodes List](#nodes-list)
 8. [API Clients](#api-clients)
 9. [Authentication Flow](#authentication-flow)
 10. [Output Formatting](#output-formatting)
@@ -1483,6 +1484,23 @@ dhadgar ping --url http://localhost:5010/healthz
 ```
 
 **Note:** Prefer `dhadgar gateway health` for comprehensive health checking.
+
+---
+
+### Nodes List
+
+List the nodes of an organization. The response is the Contracts page (`FilteredPagedResponse<NodeListItemResponse>`), with paging by `page` and `pageSize`.
+
+```bash
+dhadgar nodes list --org org-123 --status Online --page 2 --page-size 20
+```
+
+| Option | Type | Description |
+| ------ | ---- | ----------- |
+| `--org` | string | Organization ID (defaults to current org) |
+| `--status` | string | Filter by status name (`Enrolling`, `Online`, `Degraded`, `Offline`, `Maintenance`, `Decommissioned`) |
+| `--page` | int | Page number, 1 or more (default 1) |
+| `--page-size` | int | Items per page, 1 to 100 (default 20) |
 
 ---
 

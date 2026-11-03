@@ -859,35 +859,35 @@ var nodesCmd = new Command("nodes", "Node management commands");
 var nodesListCmd = new Command("list", "List nodes");
 var nodesListOrgOpt = new Option<string?>("--org") { Description = "Organization ID (defaults to current org)" };
 var nodesListStatusOpt = new Option<string?>("--status") { Description = "Filter by status (online, offline, degraded, maintenance)" };
-var nodesListSkipOpt = new Option<int?>("--skip") { Description = "Number of items to skip (pagination)" };
-nodesListSkipOpt.Validators.Add(result =>
+var nodesListPageOpt = new Option<int?>("--page") { Description = "Page number, 1-based (pagination)" };
+nodesListPageOpt.Validators.Add(result =>
 {
     var value = result.GetValueOrDefault<int?>();
-    if (value.HasValue && value.Value < 0)
+    if (value.HasValue && value.Value < 1)
     {
-        result.AddError("skip must be >= 0");
+        result.AddError("--page must be 1 or more");
     }
 });
-var nodesListTakeOpt = new Option<int?>("--take") { Description = "Number of items to take (pagination)" };
-nodesListTakeOpt.Validators.Add(result =>
+var nodesListPageSizeOpt = new Option<int?>("--page-size") { Description = "Items per page, 1-100 (pagination)" };
+nodesListPageSizeOpt.Validators.Add(result =>
 {
     var value = result.GetValueOrDefault<int?>();
-    if (value.HasValue && value.Value <= 0)
+    if (value.HasValue && (value.Value < 1 || value.Value > 100))
     {
-        result.AddError("take must be > 0");
+        result.AddError("--page-size must be between 1 and 100");
     }
 });
 nodesListCmd.Options.Add(nodesListOrgOpt);
 nodesListCmd.Options.Add(nodesListStatusOpt);
-nodesListCmd.Options.Add(nodesListSkipOpt);
-nodesListCmd.Options.Add(nodesListTakeOpt);
+nodesListCmd.Options.Add(nodesListPageOpt);
+nodesListCmd.Options.Add(nodesListPageSizeOpt);
 nodesListCmd.SetAction(async (parseResult, _) =>
 {
     var orgId = parseResult.GetValue(nodesListOrgOpt);
     var status = parseResult.GetValue(nodesListStatusOpt);
-    var skip = parseResult.GetValue(nodesListSkipOpt);
-    var take = parseResult.GetValue(nodesListTakeOpt);
-    return await NodesListNodesCommand.ExecuteAsync(orgId, status, skip, take, CancellationToken.None);
+    var page = parseResult.GetValue(nodesListPageOpt);
+    var pageSize = parseResult.GetValue(nodesListPageSizeOpt);
+    return await NodesListNodesCommand.ExecuteAsync(orgId, status, page, pageSize, CancellationToken.None);
 });
 
 var nodesGetCmd = new Command("get", "Get node details");

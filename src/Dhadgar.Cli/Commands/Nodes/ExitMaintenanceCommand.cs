@@ -33,8 +33,8 @@ public sealed class ExitMaintenanceCommand
 
         try
         {
-            var response = await nodesApi.ExitMaintenanceAsync(orgId, nodeId, ct);
-            NodesCommandHelpers.WriteJson(response);
+            await nodesApi.ExitMaintenanceAsync(orgId, nodeId, ct);
+            NodesCommandHelpers.WriteJson(new { success = true, message = $"Node '{nodeId}' left maintenance mode." });
             return 0;
         }
         catch (ApiException ex)

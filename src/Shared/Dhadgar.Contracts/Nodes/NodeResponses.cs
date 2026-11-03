@@ -1,23 +1,6 @@
 namespace Dhadgar.Contracts.Nodes;
 
 /// <summary>
-/// Summary view of a node for list responses.
-/// </summary>
-/// <param name="Id">Unique identifier of the node.</param>
-/// <param name="Name">Machine-readable node name (lowercase alphanumeric with hyphens).</param>
-/// <param name="DisplayName">Human-friendly display name.</param>
-/// <param name="Status">Current operational status of the node.</param>
-/// <param name="Platform">Operating system platform (linux or windows).</param>
-/// <param name="LastHeartbeat">Timestamp of the most recent heartbeat, if any.</param>
-public record NodeSummaryResponse(
-    string Id,
-    string Name,
-    string? DisplayName,
-    string Status,
-    string Platform,
-    DateTimeOffset? LastHeartbeat);
-
-/// <summary>
 /// Detailed view of a node including hardware, health, and capacity information.
 /// </summary>
 /// <param name="Id">Unique identifier of the node.</param>
@@ -102,19 +85,6 @@ public record NodeCapacityResponse(
     DateTimeOffset UpdatedAt);
 
 /// <summary>
-/// Paginated response containing a list of nodes.
-/// </summary>
-/// <param name="Items">The nodes in this page.</param>
-/// <param name="TotalCount">Total number of nodes matching the query.</param>
-/// <param name="Skip">Number of items skipped (offset).</param>
-/// <param name="Take">Maximum number of items returned (page size).</param>
-public record PagedNodesResponse(
-    IReadOnlyList<NodeSummaryResponse> Items,
-    int TotalCount,
-    int Skip,
-    int Take);
-
-/// <summary>
 /// Enhanced node list item with additional fields for list views.
 /// </summary>
 /// <param name="Id">Unique identifier of the node.</param>
@@ -138,3 +108,18 @@ public record NodeListItemResponse(
     int? HealthScore,
     int ActiveServers,
     IReadOnlyList<string> Tags);
+
+/// <summary>
+/// Filters applied to a node list query, echoed back in <see cref="Dhadgar.Contracts.FilteredPagedResponse{T}.Filters"/>.
+/// </summary>
+public record NodeListFilters(
+    string? Status,
+    string? Platform,
+    int? MinHealthScore,
+    int? MaxHealthScore,
+    bool? HasActiveServers,
+    string? Search,
+    IReadOnlyList<string>? Tags,
+    string SortBy,
+    string SortOrder,
+    bool IncludeDecommissioned);

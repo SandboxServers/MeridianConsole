@@ -85,6 +85,32 @@ public sealed class CliGatewayRouteSeamTests
         GatewayRoutes.Resolve(capture.RequestUri!.AbsolutePath)!.ClusterId.Should().Be("nodes");
     }
 
+    [Fact]
+    public async Task NodesList_ThroughRefit_SendsPageAndPageSize()
+    {
+        using var capture = new CaptureHandler();
+        using var http = new HttpClient(capture) { BaseAddress = new Uri(new CliConfig().EffectiveNodesUrl) };
+
+        try
+        {
+            await RestService.For<INodesApi>(http).GetNodesAsync(OrgId, page: 2, pageSize: 5, status: null, ct: CancellationToken.None);
+        }
+        catch (ApiException)
+        {
+            // The stub answers 400; only the request URI matters here.
+        }
+
+        capture.RequestUri.Should().NotBeNull();
+        capture.RequestUri!.Query.Should().Contain("page=2").And.Contain("pageSize=5").And.NotContain("skip").And.NotContain("take");
+    }
+
+    [Fact]
+    public void NodesList_ReturnType_IsTheContractsPage()
+    {
+        typeof(INodesApi).GetMethod(nameof(INodesApi.GetNodesAsync))!.ReturnType
+            .Should().Be<Task<Dhadgar.Contracts.FilteredPagedResponse<Dhadgar.Contracts.Nodes.NodeListItemResponse>>>();
+    }
+
     private sealed class CaptureHandler : HttpMessageHandler
     {
         public Uri? RequestUri { get; private set; }
