@@ -6,6 +6,6 @@ namespace Dhadgar.Cli.Tests;
 /// Serialises every test that sets the process-wide <c>CliConfig.ConfigDirectoryOverride</c> seam.
 /// </summary>
 [CollectionDefinition("CliConfig", DisableParallelization = true)]
-public sealed class CliConfigCollection
+public sealed class CliConfigCollectionDefinition
 {
 }

@@ -47,7 +47,7 @@ public sealed class CliGatewayRouteSeamTests
     [Fact]
     public async Task TokenRequest_ThroughRefit_SendsBasePathPlusConnectToken()
     {
-        var capture = new CaptureHandler();
+        using var capture = new CaptureHandler();
         using var http = new HttpClient(capture) { BaseAddress = new Uri(new CliConfig().EffectiveIdentityUrl) };
 
         try
@@ -68,7 +68,7 @@ public sealed class CliGatewayRouteSeamTests
     [Fact]
     public async Task NodesList_ThroughRefit_SendsBasePathPlusOrganizationNodes()
     {
-        var capture = new CaptureHandler();
+        using var capture = new CaptureHandler();
         using var http = new HttpClient(capture) { BaseAddress = new Uri(new CliConfig().EffectiveNodesUrl) };
 
         try
@@ -144,7 +144,7 @@ public sealed class CliGatewayRouteSeamTests
                 : new ResolvedRoute(best.Name, best.ClusterId, RemovePrefix(path, best.RemovePrefix));
         }
 
-        private static IReadOnlyList<GatewayRoute> Load()
+        private static List<GatewayRoute> Load()
         {
             // The Gateway's appsettings.json may carry comments and trailing commas.
             var options = new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true };

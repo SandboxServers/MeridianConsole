@@ -99,6 +99,7 @@ public sealed class LoginCommandTests : IDisposable
         public void Dispose()
         {
             _listener.Stop();
+            _listener.Dispose();
         }
 
         private async Task ServeOnceAsync(string statusLine, string body)
@@ -116,7 +117,7 @@ public sealed class LoginCommandTests : IDisposable
                     const string header = "Content-Length:";
                     if (line.StartsWith(header, StringComparison.OrdinalIgnoreCase))
                     {
-                        int.TryParse(line[header.Length..].Trim(), out contentLength);
+                        _ = int.TryParse(line[header.Length..].Trim(), out contentLength);
                     }
                 }
 
