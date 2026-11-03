@@ -622,27 +622,25 @@ builder.Services.AddOpenIddict()
                 var isWifRequest = requestedScopes.Contains("wif", StringComparer.OrdinalIgnoreCase);
 
                 // A bound client carries its organization on the default audience only; wif tokens never do (D-ML165).
-                if (!isWifRequest)
+                var properties = await manager.GetPropertiesAsync(application);
+                var binding = ClientOrganizationBinding.Read(properties);
+                if (!binding.IsSuccess && binding.Error == ClientOrganizationBinding.InvalidError)
                 {
-                    var properties = await manager.GetPropertiesAsync(application);
-                    var binding = ClientOrganizationBinding.Read(properties);
-                    if (!binding.IsSuccess && binding.Error == ClientOrganizationBinding.InvalidError)
-                    {
-                        httpContext.RequestServices.GetRequiredService<ILoggerFactory>()
-                            .CreateLogger("Dhadgar.Identity.ClientCredentials")
-                            .LogError(
-                                "[Identity.ClientBindingInvalid] client {ClientId} has an invalid organization binding",
-                                context.ClientId);
-                        context.Reject(OpenIddictConstants.Errors.ServerError, "Client configuration is invalid.");
-                        return;
-                    }
+                    httpContext.RequestServices.GetRequiredService<ILoggerFactory>()
+                        .CreateLogger("Dhadgar.Identity.ClientCredentials")
+                        .LogError(
+                            "[Identity.ClientBindingInvalid] client {ClientId} has an invalid organization binding",
+                            context.ClientId);
+                    context.Reject(OpenIddictConstants.Errors.ServerError, "Client configuration is invalid.");
+                    return;
+                }
 
-                    if (binding.IsSuccess)
-                    {
-                        var orgClaim = new Claim(TokenClaims.OrganizationId, binding.Value.ToString("D"));
-                        orgClaim.SetDestinations(OpenIddictConstants.Destinations.AccessToken);
-                        identity.AddClaim(orgClaim);
-                    }
+                // A bound client carries its organization on the default audience only; wif tokens never do (D-ML165).
+                if (binding.IsSuccess && !isWifRequest)
+                {
+                    var orgClaim = new Claim(TokenClaims.OrganizationId, binding.Value.ToString("D"));
+                    orgClaim.SetDestinations(OpenIddictConstants.Destinations.AccessToken);
+                    identity.AddClaim(orgClaim);
                 }
 
                 var principal = new ClaimsPrincipal(identity);
@@ -835,7 +833,7 @@ if (autoMigrate)
     await db.Database.MigrateAsync();
     app.Logger.LogInformation("Database migrations applied successfully.");
 
-    await SeedDevOpenIddictClientAsync(app.Services, app.Configuration, app.Logger);
+    await SeedDevOpenIddictClientAsync(app.Services, app.Configuration, app.Environment, app.Logger);
 }
 
 // Anonymous endpoints (no authentication required)
@@ -886,6 +884,7 @@ await app.RunAsync();
 static async Task SeedDevOpenIddictClientAsync(
     IServiceProvider services,
     IConfiguration configuration,
+    IHostEnvironment environment,
     ILogger logger)
 {
     var enabled = configuration.GetValue<bool?>("OpenIddict:DevClient:Enabled") ?? true;
@@ -917,6 +916,21 @@ static async Task SeedDevOpenIddictClientAsync(
         {
             logger.LogWarning("OpenIddict:DevClient:OrganizationId is not a valid Guid; the dev client is seeded unbound.");
         }
+    }
+
+    // A dev client bound to an organization mints a known-secret token with org_id, so outside Development and
+    // Testing the binding is ignored unless the explicit override is set (F208). The reconcile below still runs
+    // with null, which clears any binding left from an earlier start. The value itself is never logged.
+    var allowOrganizationBinding = configuration.GetValue<bool?>("OpenIddict:DevClient:AllowOrganizationBinding") ?? false;
+    if (devClientOrganizationId is not null &&
+        !environment.IsDevelopment() &&
+        !environment.IsEnvironment("Testing") &&
+        !allowOrganizationBinding)
+    {
+        logger.LogWarning(
+            "OpenIddict:DevClient:OrganizationId is ignored outside Development and Testing; the dev client is seeded unbound. " +
+            "Set OpenIddict:DevClient:AllowOrganizationBinding=true to override.");
+        devClientOrganizationId = null;
     }
 
     using var scope = services.CreateScope();

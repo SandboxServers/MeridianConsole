@@ -362,6 +362,40 @@ public sealed class ClientCredentialsFlowIntegrationTests : IAsyncLifetime
         Assert.False(body.TryGetProperty("access_token", out _));
     }
 
+    [Fact]
+    public async Task ClientCredentials_MalformedBindingWifScope_IsServerError()
+    {
+        var clientId = $"dev-malformed-wif-{Guid.NewGuid():N}";
+        const string secret = "dev-malformed-wif-secret";
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var manager = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
+            var descriptor = new OpenIddictApplicationDescriptor
+            {
+                ClientId = clientId,
+                ClientSecret = secret,
+                DisplayName = "Malformed Binding Wif Client (Tests)",
+                Permissions =
+                {
+                    OpenIddictConstants.Permissions.Endpoints.Token,
+                    OpenIddictConstants.Permissions.GrantTypes.ClientCredentials,
+                    OpenIddictConstants.Permissions.Prefixes.Scope + "wif"
+                }
+            };
+            descriptor.Properties[ClientOrganizationBinding.PropertyName] =
+                JsonSerializer.SerializeToElement("nope");
+            await manager.CreateAsync(descriptor);
+        }
+
+        using var response = await RequestTokenAsync(clientId, secret, "wif");
+
+        // Fail closed for wif too: the binding is read for every request, only the org_id claim is skipped.
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("server_error", body.GetProperty("error").GetString());
+        Assert.False(body.TryGetProperty("access_token", out _));
+    }
+
     private async Task<HttpResponseMessage> RequestTokenAsync(string clientId, string clientSecret, string scope)
     {
         using var request = new FormUrlEncodedContent(new Dictionary<string, string>
