@@ -212,10 +212,13 @@ public sealed class NodesOutboxTests
     }
 
     /// <summary>Test-only consumer: proves the outbox delivered the event (harness.Published does not see outbox deliveries, F232).</summary>
+    // CA1812: MassTransit instantiates this consumer at runtime (AddConsumer / GetConsumerHarness); the analyzer cannot see that.
+#pragma warning disable CA1812
     internal sealed class CapacityReservedProbe : IConsumer<CapacityReserved>
     {
         public Task Consume(ConsumeContext<CapacityReserved> context) => Task.CompletedTask;
     }
+#pragma warning restore CA1812
 
     /// <summary>Counts OutboxMessage rows added by saves that succeed, per context.</summary>
     private sealed class OutboxWriteCounter : SaveChangesInterceptor

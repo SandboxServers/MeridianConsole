@@ -67,7 +67,7 @@ public sealed class NodesDatabaseStartupTests
         var migrator = new FakeMigrator(failures: 2);
         var time = new FakeTimeProvider(DateTimeOffset.UtcNow);
         using var provider = BuildMigrationServices(migrator).BuildServiceProvider();
-        var service = new NodesDatabaseStartupService(
+        using var service = new NodesDatabaseStartupService(
             provider.GetRequiredService<IServiceScopeFactory>(),
             new FakeHostEnvironment("Development"),
             time,
@@ -109,7 +109,7 @@ public sealed class NodesDatabaseStartupTests
         // Arrange
         var migrator = new FakeMigrator(failures: 0);
         using var provider = BuildMigrationServices(migrator).BuildServiceProvider();
-        var service = new NodesDatabaseStartupService(
+        using var service = new NodesDatabaseStartupService(
             provider.GetRequiredService<IServiceScopeFactory>(),
             new FakeHostEnvironment("Production"),
             new FakeTimeProvider(DateTimeOffset.UtcNow),
