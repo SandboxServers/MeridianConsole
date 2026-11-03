@@ -22,6 +22,9 @@ public sealed class NodesDatabaseStartupTests
     private const string UnreachableConnectionString =
         "Host=127.0.0.1;Port=1;Database=nodes;Username=u;Password=p;Timeout=1;Command Timeout=1";
 
+    // Mirrors NodesDatabaseStartupService.StartupAttemptBound (internal, not visible to this project).
+    private static readonly TimeSpan StartupAttemptBound = TimeSpan.FromSeconds(10);
+
     [Fact]
     public async Task Host_DatabaseUnreachable_StartsLiveAndNotReady()
     {
@@ -127,6 +130,99 @@ public sealed class NodesDatabaseStartupTests
     }
 
     [Fact]
+    public async Task Host_Development_MigratesBeforeOtherHostedServicesStart()
+    {
+        // Arrange - a migration that takes 200 ms, then a hosted service registered after the startup service
+        var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
+        {
+            EnvironmentName = Environments.Development,
+        });
+        builder.Services.AddSingleton(TimeProvider.System);
+        var migrator = new DelayedMigrator();
+        builder.Services.AddSingleton<INodesDatabaseMigrator>(migrator);
+        builder.Services.AddSingleton(migrator);
+        builder.Services.AddHostedService<NodesDatabaseStartupService>();
+        builder.Services.AddHostedService<ProbeHostedService>();
+        using var host = builder.Build();
+
+        // Act
+        await host.StartAsync();
+        await WaitUntilAsync(() => host.Services.GetServices<IHostedService>().OfType<NodesDatabaseStartupService>().Single().ExecuteTask!.IsCompleted);
+        var probe = host.Services.GetServices<IHostedService>().OfType<ProbeHostedService>().Single();
+        await host.StopAsync();
+
+        // Assert - the probe started after the migration completed, and the migration ran once (no second run from ExecuteAsync)
+        Assert.True(probe.SawMigrated);
+        Assert.Equal(1, migrator.Calls);
+    }
+
+    [Fact]
+    public async Task StartingAsync_MigrationHangs_ReturnsAfterBoundAndExecuteRetries()
+    {
+        // Arrange - call 1 hangs, call 2 fails, call 3 succeeds
+        var migrator = new HangingMigrator();
+        var time = new FakeTimeProvider(DateTimeOffset.UtcNow);
+        using var provider = BuildMigrationServices(migrator).BuildServiceProvider();
+        using var service = new NodesDatabaseStartupService(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            new FakeHostEnvironment("Development"),
+            time,
+            NullLogger<NodesDatabaseStartupService>.Instance);
+
+        // Act - StartingAsync returns once the bound elapses, without throwing
+        var starting = service.StartingAsync(CancellationToken.None);
+        await WaitUntilAsync(() => migrator.Calls == 1);
+        time.Advance(StartupAttemptBound);
+        await starting.WaitAsync(TimeSpan.FromSeconds(5));
+
+        // Assert
+        Assert.True(starting.IsCompletedSuccessfully);
+        Assert.Equal(1, migrator.Calls);
+
+        // Act - StartAsync runs the background retry: the second attempt fails and schedules a 1 s retry
+        await service.StartAsync(CancellationToken.None);
+        var run = service.ExecuteTask!;
+        await WaitUntilAsync(() => migrator.Calls == 2);
+        Assert.False(run.IsCompleted);
+
+        // Assert - the third attempt happens after the 1 s backoff and succeeds. Advance repeatedly: the backoff timer
+        // is created a moment after the second attempt returns, and an Advance before that is lost.
+        using var advance = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        while (migrator.Calls < 3)
+        {
+            time.Advance(TimeSpan.FromSeconds(1));
+            await Task.Delay(10, advance.Token);
+        }
+
+        await WaitUntilAsync(() => run.IsCompleted);
+        Assert.True(run.IsCompletedSuccessfully);
+
+        await service.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task StartingAsync_NotDevelopment_NeverMigrates()
+    {
+        // Arrange
+        var migrator = new FakeMigrator(failures: 0);
+        using var provider = BuildMigrationServices(migrator).BuildServiceProvider();
+        using var service = new NodesDatabaseStartupService(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            new FakeHostEnvironment("Production"),
+            new FakeTimeProvider(DateTimeOffset.UtcNow),
+            NullLogger<NodesDatabaseStartupService>.Instance);
+
+        // Act
+        await service.StartingAsync(CancellationToken.None);
+        await service.StartAsync(CancellationToken.None);
+        await WaitUntilAsync(() => service.ExecuteTask!.IsCompleted);
+        await service.StopAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Equal(0, migrator.Calls);
+    }
+
+    [Fact]
     public async Task HealthCheck_MigrationsPending_IsUnhealthy()
     {
         // Arrange - SQLite is relational, and nothing has been migrated, so every migration is pending
@@ -175,6 +271,57 @@ public sealed class NodesDatabaseStartupTests
         while (!condition())
         {
             await Task.Delay(10, cts.Token);
+        }
+    }
+
+    private sealed class DelayedMigrator : INodesDatabaseMigrator
+    {
+        private volatile bool _completed;
+        private int _calls;
+
+        public bool Completed => _completed;
+
+        public int Calls => Volatile.Read(ref _calls);
+
+        public async Task<Result> MigrateAsync(CancellationToken ct)
+        {
+            Interlocked.Increment(ref _calls);
+            await Task.Delay(TimeSpan.FromMilliseconds(200), ct);
+            _completed = true;
+            return Result.Success();
+        }
+    }
+
+    private sealed class ProbeHostedService(DelayedMigrator migrator) : IHostedService
+    {
+        public bool SawMigrated { get; private set; }
+
+        public Task StartAsync(CancellationToken cancellationToken)
+        {
+            SawMigrated = migrator.Completed;
+            return Task.CompletedTask;
+        }
+
+        public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    private sealed class HangingMigrator : INodesDatabaseMigrator
+    {
+        private int _calls;
+
+        public int Calls => Volatile.Read(ref _calls);
+
+        public async Task<Result> MigrateAsync(CancellationToken ct)
+        {
+            var call = Interlocked.Increment(ref _calls);
+            if (call == 1)
+            {
+                await Task.Delay(Timeout.Infinite, ct);
+            }
+
+            return call == 2
+                ? Result.Failure("[Nodes.DatabaseUnavailable] test failure")
+                : Result.Success();
         }
     }
 

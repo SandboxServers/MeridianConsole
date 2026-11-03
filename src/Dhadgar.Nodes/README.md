@@ -416,7 +416,7 @@ dotnet ef database update \
   --startup-project src/Dhadgar.Nodes
 ```
 
-**Note:** Migrations are applied in the background in Development mode, with retry while the database is down (`NodesDatabaseStartupService`). They are not applied outside Development.
+**Note:** In Development, migrations are applied once in `StartingAsync`, before other hosted services start (bounded at 10 s, F358), then in the background with retry until they succeed (`NodesDatabaseStartupService`). If the database is down at start, the host still starts. Residual: if Postgres comes up after a failed first attempt, other services can still see `42P01` for up to one backoff interval (30 s at most) before the background loop migrates. They are not applied outside Development.
 
 Recent migrations:
 
