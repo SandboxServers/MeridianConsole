@@ -147,11 +147,13 @@ public sealed class NodesDatabaseStartupTests
 
         // Act
         await host.StartAsync();
+        await WaitUntilAsync(() => host.Services.GetServices<IHostedService>().OfType<NodesDatabaseStartupService>().Single().ExecuteTask!.IsCompleted);
         var probe = host.Services.GetServices<IHostedService>().OfType<ProbeHostedService>().Single();
         await host.StopAsync();
 
-        // Assert - the probe started after the migration completed
+        // Assert - the probe started after the migration completed, and the migration ran once (no second run from ExecuteAsync)
         Assert.True(probe.SawMigrated);
+        Assert.Equal(1, migrator.Calls);
     }
 
     [Fact]
@@ -183,10 +185,16 @@ public sealed class NodesDatabaseStartupTests
         await WaitUntilAsync(() => migrator.Calls == 2);
         Assert.False(run.IsCompleted);
 
-        // Assert - the third attempt happens after the 1 s backoff and succeeds
-        time.Advance(TimeSpan.FromSeconds(1));
-        await WaitUntilAsync(() => migrator.Calls == 3, TimeSpan.FromMilliseconds(750));
-        await WaitUntilAsync(() => run.IsCompleted, TimeSpan.FromMilliseconds(750));
+        // Assert - the third attempt happens after the 1 s backoff and succeeds. Advance repeatedly: the backoff timer
+        // is created a moment after the second attempt returns, and an Advance before that is lost.
+        using var advance = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        while (migrator.Calls < 3)
+        {
+            time.Advance(TimeSpan.FromSeconds(1));
+            await Task.Delay(10, advance.Token);
+        }
+
+        await WaitUntilAsync(() => run.IsCompleted);
         Assert.True(run.IsCompletedSuccessfully);
 
         await service.StopAsync(CancellationToken.None);
@@ -269,11 +277,15 @@ public sealed class NodesDatabaseStartupTests
     private sealed class DelayedMigrator : INodesDatabaseMigrator
     {
         private volatile bool _completed;
+        private int _calls;
 
         public bool Completed => _completed;
 
+        public int Calls => Volatile.Read(ref _calls);
+
         public async Task<Result> MigrateAsync(CancellationToken ct)
         {
+            Interlocked.Increment(ref _calls);
             await Task.Delay(TimeSpan.FromMilliseconds(200), ct);
             _completed = true;
             return Result.Success();
