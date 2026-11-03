@@ -30,6 +30,8 @@
     <ProjectReference Include="..\Dhadgar.Nodes.Tests\Dhadgar.Nodes.Tests.csproj" />
     <!-- Both web apps define a global Program; the Gateway's is reached through the alias (D-S216). -->
     <ProjectReference Include="..\..\src\Dhadgar.Gateway\Dhadgar.Gateway.csproj" Aliases="gateway" />
+    <!-- Identity's Program is aliased for the same reason as the Gateway's (D-S216). -->
+    <ProjectReference Include="..\..\src\Dhadgar.Identity\Dhadgar.Identity.csproj" Aliases="identity" />
   </ItemGroup>
 
   <ItemGroup>

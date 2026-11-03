@@ -234,6 +234,7 @@ curl http://localhost:5000/
       "Enabled": true,
       "ClientId": "dev-client",
       "ClientSecret": "dev-secret",
+      "OrganizationId": "",
       "RedirectUris": []
     },
     "ServiceAccounts": {
@@ -748,6 +749,23 @@ Access tokens include the following claims:
   "iat": 1704066300
 }
 ```
+
+### Client Credentials Organization Binding
+
+A client_credentials client can be bound to one organization. The binding is an OpenIddict application property (`dhadgar_organization_id`) and is read and written only by `ClientOrganizationBinding`.
+
+| Client | Requested scope | Access token claims |
+|--------|-----------------|---------------------|
+| Bound | default audience (no `wif`) | `org_id` = bound organization id ("D" format), `principal_type` = `service`, `sub` = `client_id` |
+| Bound | `wif` | No `org_id` (audience `api://AzureADTokenExchange`) |
+| Unbound | any | No `org_id` |
+| Malformed binding | any | No token; `error = server_error` (OpenIddict returns HTTP 500); logs Error `[Identity.ClientBindingInvalid]` with the client id only |
+
+Claim names come from `Dhadgar.Contracts.Identity.TokenClaims`. Nodes compares `org_id` with the route's `organizationId`.
+
+**Blast radius (F208):** A bound client is a tenant admin in its organization for every service that uses the `TenantScoped` policy (Nodes, including audit, and Servers). Scopes do not narrow this. Do not bind any client outside Development and the lab until F208b exists (F208b covers Servers and the shared `TenantScopedHandler` in ServiceDefaults).
+
+**Seeding:** `OpenIddict:DevClient:OrganizationId` (a Guid; blank means unbound) binds `dev-client`. A non-Guid value logs a Warning naming the key and is treated as unbound. Outside Development and Testing the value is ignored (the client is seeded unbound) unless `OpenIddict:DevClient:AllowOrganizationBinding` is `true`; the Warning names the key only. Compose files must not set the override. The binding is applied on create and reconciled on every start by `DevClientSeeder.ReconcileOrganizationAsync`: it can be set, changed or cleared on an existing client. The reconcile updates the client only when the binding differs, and logs Information with the client id only ("bound", "rebound" or "unbound"). The client secret is not changed.
 
 ### Refresh Token Flow
 

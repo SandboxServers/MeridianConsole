@@ -2,7 +2,9 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Dhadgar.Contracts.Identity;
 using Dhadgar.Identity.Data;
+using Dhadgar.Identity.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -20,6 +22,9 @@ public sealed class ClientCredentialsFlowIntegrationTests : IAsyncLifetime
     private readonly HttpClient _client;
     private const string DevClientId = "dev-client";
     private const string DevClientSecret = "dev-secret";
+    private const string BoundClientId = "dev-bound-client";
+    private const string BoundClientSecret = "dev-bound-secret";
+    private static readonly Guid BoundOrganizationId = new("5b1f0c2e-7a3d-4c8e-9f10-2d6a4b8c1e77");
 
     public ClientCredentialsFlowIntegrationTests(IdentityWebApplicationFactory factory)
     {
@@ -58,6 +63,27 @@ public sealed class ClientCredentialsFlowIntegrationTests : IAsyncLifetime
             };
 
             await manager.CreateAsync(descriptor);
+        }
+
+        if (await manager.FindByClientIdAsync(BoundClientId) is null)
+        {
+            var boundDescriptor = new OpenIddictApplicationDescriptor
+            {
+                ClientId = BoundClientId,
+                ClientSecret = BoundClientSecret,
+                DisplayName = "Bound Dev Client (Tests)",
+                Permissions =
+                {
+                    OpenIddictConstants.Permissions.Endpoints.Token,
+                    OpenIddictConstants.Permissions.GrantTypes.ClientCredentials,
+                    OpenIddictConstants.Permissions.Prefixes.Scope + "servers:read",
+                    OpenIddictConstants.Permissions.Prefixes.Scope + "nodes:manage",
+                    OpenIddictConstants.Permissions.Prefixes.Scope + "wif"
+                }
+            };
+            ClientOrganizationBinding.Apply(boundDescriptor, BoundOrganizationId);
+
+            await manager.CreateAsync(boundDescriptor);
         }
     }
 
@@ -267,6 +293,128 @@ public sealed class ClientCredentialsFlowIntegrationTests : IAsyncLifetime
         var result = await response.Content.ReadFromJsonAsync<JsonElement>();
         Assert.True(result.TryGetProperty("error", out var errorProp));
         Assert.Equal("invalid_request", errorProp.GetString());
+    }
+
+    [Fact]
+    public async Task ClientCredentials_BoundClient_TokenCarriesOrgId()
+    {
+        using var response = await RequestTokenAsync(BoundClientId, BoundClientSecret, "servers:read");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var jwt = await ReadAccessTokenAsync(response);
+        Assert.Equal(
+            BoundOrganizationId.ToString("D"),
+            jwt.Claims.FirstOrDefault(c => c.Type == TokenClaims.OrganizationId)?.Value);
+        Assert.Equal("service", jwt.Claims.FirstOrDefault(c => c.Type == TokenClaims.PrincipalType)?.Value);
+    }
+
+    [Fact]
+    public async Task ClientCredentials_UnboundClient_TokenHasNoOrgId()
+    {
+        using var response = await RequestTokenAsync(DevClientId, DevClientSecret, "servers:read");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var jwt = await ReadAccessTokenAsync(response);
+        Assert.DoesNotContain(jwt.Claims, c => c.Type == TokenClaims.OrganizationId);
+    }
+
+    [Fact]
+    public async Task ClientCredentials_BoundClientWifScope_TokenHasNoOrgId()
+    {
+        using var response = await RequestTokenAsync(BoundClientId, BoundClientSecret, "wif");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var jwt = await ReadAccessTokenAsync(response);
+        Assert.DoesNotContain(jwt.Claims, c => c.Type == TokenClaims.OrganizationId);
+    }
+
+    [Fact]
+    public async Task ClientCredentials_MalformedBinding_IsServerError()
+    {
+        var clientId = $"dev-malformed-{Guid.NewGuid():N}";
+        const string secret = "dev-malformed-secret";
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var manager = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
+            var descriptor = new OpenIddictApplicationDescriptor
+            {
+                ClientId = clientId,
+                ClientSecret = secret,
+                DisplayName = "Malformed Binding Client (Tests)",
+                Permissions =
+                {
+                    OpenIddictConstants.Permissions.Endpoints.Token,
+                    OpenIddictConstants.Permissions.GrantTypes.ClientCredentials,
+                    OpenIddictConstants.Permissions.Prefixes.Scope + "servers:read"
+                }
+            };
+            descriptor.Properties[ClientOrganizationBinding.PropertyName] =
+                JsonSerializer.SerializeToElement("nope");
+            await manager.CreateAsync(descriptor);
+        }
+
+        using var response = await RequestTokenAsync(clientId, secret, "servers:read");
+
+        // OpenIddict maps server_error to 500 (the spec said 400); the error code is what matters.
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("server_error", body.GetProperty("error").GetString());
+        Assert.False(body.TryGetProperty("access_token", out _));
+    }
+
+    [Fact]
+    public async Task ClientCredentials_MalformedBindingWifScope_IsServerError()
+    {
+        var clientId = $"dev-malformed-wif-{Guid.NewGuid():N}";
+        const string secret = "dev-malformed-wif-secret";
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var manager = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
+            var descriptor = new OpenIddictApplicationDescriptor
+            {
+                ClientId = clientId,
+                ClientSecret = secret,
+                DisplayName = "Malformed Binding Wif Client (Tests)",
+                Permissions =
+                {
+                    OpenIddictConstants.Permissions.Endpoints.Token,
+                    OpenIddictConstants.Permissions.GrantTypes.ClientCredentials,
+                    OpenIddictConstants.Permissions.Prefixes.Scope + "wif"
+                }
+            };
+            descriptor.Properties[ClientOrganizationBinding.PropertyName] =
+                JsonSerializer.SerializeToElement("nope");
+            await manager.CreateAsync(descriptor);
+        }
+
+        using var response = await RequestTokenAsync(clientId, secret, "wif");
+
+        // Fail closed for wif too: the binding is read for every request, only the org_id claim is skipped.
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("server_error", body.GetProperty("error").GetString());
+        Assert.False(body.TryGetProperty("access_token", out _));
+    }
+
+    private async Task<HttpResponseMessage> RequestTokenAsync(string clientId, string clientSecret, string scope)
+    {
+        using var request = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["grant_type"] = "client_credentials",
+            ["client_id"] = clientId,
+            ["client_secret"] = clientSecret,
+            ["scope"] = scope
+        });
+
+        return await _client.PostAsync("/connect/token", request);
+    }
+
+    private static async Task<JwtSecurityToken> ReadAccessTokenAsync(HttpResponseMessage response)
+    {
+        var result = await response.Content.ReadFromJsonAsync<JsonElement>();
+        var accessToken = result.GetProperty("access_token").GetString();
+        Assert.NotNull(accessToken);
+        return new JwtSecurityTokenHandler().ReadJwtToken(accessToken);
     }
 
     [Fact]
