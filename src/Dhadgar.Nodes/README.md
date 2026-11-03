@@ -414,7 +414,7 @@ dotnet ef database update \
   --startup-project src/Dhadgar.Nodes
 ```
 
-**Note:** Migrations are auto-applied in Development mode.
+**Note:** Migrations are applied in the background in Development mode, with retry while the database is down (`NodesDatabaseStartupService`). They are not applied outside Development.
 
 Recent migrations:
 
@@ -425,7 +425,8 @@ Recent migrations:
 
 - **Retry policy:** `NodesRetryingExecutionStrategy` retries transient database failures 3 times, with a delay of at most 1 s. On a client-side connection failure (for example, after a Postgres restart left pooled connections dead), it also clears the Npgsql pool, so the retry opens a fresh connection.
 - **User-initiated transactions:** the retrying strategy rejects a user transaction that runs outside it. Any new user-initiated transaction must run inside `context.Database.CreateExecutionStrategy().ExecuteAsync(...)`, as `CapacityReservationService.ReserveAsync` does.
-- **Publishing is not transactional:** Nodes has no `UseBusOutbox()`, so `Publish` goes straight to the broker and is not part of the database transaction (F117). A retried operation must therefore use fixed ids so a republished event is identical. The outbox decision is pending (D-ML133).
+- **Retrying after a failed attempt:** reset the tracker with `ResetForRetry()` (`NodesChangeTrackerExtensions`), never `ChangeTracker.Clear()`, when the retried code publishes again. `Clear()` detaches the bus outbox's unsaved `OutboxState`, and the retried publish then fails on its foreign key (F230).
+- **Publishing is transactional:** Nodes publishes through the EF bus outbox (`NodesMessaging.AddNodesOutbox`, with `UseBusOutbox()`). A `Publish` made before `SaveChanges` is stored with the entity changes and delivered after commit, so a failed save delivers nothing. Delivery can lag the commit by up to 1 s (`QueryDelay`). A retried operation still uses fixed ids, so a retry that reaches the outbox is identical. Consumers publish through their consume context and so bypass the outbox. (D-ML133).
 
 ---
 
@@ -682,6 +683,8 @@ docker run -p 5040:8080 \
 | `/healthz` | Full health check |
 | `/livez` | Kubernetes liveness probe |
 | `/readyz` | Kubernetes readiness probe |
+
+The `nodes-database` check (tag `ready`) returns `Unhealthy` while the database is unreachable or migrations are pending, so `/readyz` answers 503. The host starts and `/livez` answers 200 without the database. In Development, migrations run in the background with a retry (1 s, doubling, capped at 30 s). Outside Development the service never migrates; the database must be migrated by the deployment pipeline. Apply migrations before rolling out a new image: a pod whose schema is behind reports `database migrations pending` and stays not-ready (D-ML290).
 
 ---
 

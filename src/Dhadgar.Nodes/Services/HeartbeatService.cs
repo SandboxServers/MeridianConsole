@@ -149,9 +149,10 @@ public sealed class HeartbeatService : IHeartbeatService
         }
 
         // Transactional Outbox Pattern: Publish events BEFORE SaveChangesAsync.
-        // MassTransit's outbox stores messages in the same transaction as entity changes.
+        // MassTransit's EF bus outbox (NodesMessaging) stores messages in the same transaction as entity changes.
         // When SaveChangesAsync commits, both the entity updates AND the outbox messages
-        // are persisted atomically. The outbox delivery service then sends the messages.
+        // are persisted atomically. The outbox delivery service then sends the messages,
+        // up to QueryDelay (1 s) after the commit. If SaveChangesAsync fails, nothing is sent.
         await PublishStatusEventsAsync(nodeId, previousStatus, node.Status, request, now, ct);
 
         await _dbContext.SaveChangesAsync(ct);
@@ -199,9 +200,10 @@ public sealed class HeartbeatService : IHeartbeatService
         }
 
         // Transactional Outbox Pattern: Publish events BEFORE SaveChangesAsync.
-        // MassTransit's outbox stores messages in the same transaction as entity changes.
+        // MassTransit's EF bus outbox (NodesMessaging) stores messages in the same transaction as entity changes.
         // When SaveChangesAsync commits, both the entity updates AND the outbox messages
-        // are persisted atomically. The outbox delivery service then sends the messages.
+        // are persisted atomically. The outbox delivery service then sends the messages,
+        // up to QueryDelay (1 s) after the commit. If SaveChangesAsync fails, nothing is sent.
         foreach (var node in staleNodes)
         {
             await _publishEndpoint.Publish(

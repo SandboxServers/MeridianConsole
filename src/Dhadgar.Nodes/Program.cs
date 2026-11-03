@@ -7,6 +7,7 @@ using Dhadgar.Nodes.Consumers;
 using Dhadgar.Nodes.Data;
 using Dhadgar.Nodes.Endpoints;
 using Dhadgar.Nodes.Hubs;
+using Dhadgar.Nodes.Messaging;
 using Dhadgar.Nodes.Observability;
 using Dhadgar.Nodes.Services;
 using Dhadgar.Nodes.Services.CommandSigning;
@@ -48,8 +49,10 @@ builder.Services.AddSingleton<IValidateOptions<NodesOptions>, NodesOptions>();
 builder.Services.AddDbContext<NodesDbContext>(options =>
     NodesDatabase.Configure(options, builder.Configuration.GetConnectionString("Postgres")));
 
-// Note: PostgreSQL health check is already registered by AddDhadgarServiceDefaults
-// with HealthCheckDependencies.Postgres - no need to add it again here.
+// Database startup: Development migrates in the background, and the "nodes-database" readiness check
+// (tag "ready") reports 503 while the database is unreachable or migrations are pending. AddDhadgarServiceDefaults
+// registers no Postgres check, so this one is the only database check on /readyz.
+builder.Services.AddNodesDatabaseStartup();
 
 // Register SignalR for the agent hub (shared framework; no package needed)
 builder.Services.AddSignalR(o =>
@@ -137,19 +140,8 @@ builder.Services.AddMassTransit(x =>
         options.Tags.Add("messaging");
     });
 
-    // Configure Entity Framework Core outbox for transactional messaging
-    // This ensures DB commits and event publication are atomic
-    x.AddEntityFrameworkOutbox<NodesDbContext>(o =>
-    {
-        // Use PostgreSQL for the outbox
-        o.UsePostgres();
-
-        // Disable inbox for now (no consumers in core)
-        o.DisableInboxCleanupService();
-
-        // Query delay and delivery delay settings
-        o.QueryDelay = TimeSpan.FromSeconds(1);
-    });
+    // EF bus outbox on Postgres: publishes commit with the entity changes (see NodesMessaging)
+    NodesMessaging.AddNodesOutbox(x, o => o.UsePostgres());
 
     x.UsingRabbitMq((context, cfg) =>
     {
@@ -195,9 +187,6 @@ app.UseAuthentication();
 // mTLS authentication middleware for agent endpoints
 app.UseMtlsAuthentication();
 app.UseAuthorization();
-
-// Auto-migrate database in development
-await app.AutoMigrateDatabaseAsync<NodesDbContext>();
 
 // Initialize the Certificate Authority on startup
 try
