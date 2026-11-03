@@ -354,7 +354,8 @@ Dhadgar.Cli/
 ├── Utilities/                   # Utility classes
 │   └── ExpirationParser.cs      # Parse expiration strings
 ├── Hello.cs                     # Smoke test surface
-├── Program.cs                   # Entry point and command wiring
+├── Program.cs                   # Entry point (calls CliApp.BuildRoot)
+├── CliApp.cs                    # Command wiring (BuildRoot)
 ├── Dhadgar.Cli.csproj           # Project file
 └── README.md                    # This file
 ```
@@ -414,7 +415,7 @@ public sealed class ExampleCommand
 
 ### Command Registration
 
-Commands are registered in `Program.cs` using System.CommandLine:
+Commands are registered in `CliApp.cs` using System.CommandLine:
 
 ```csharp
 var root = new RootCommand("Dhadgar CLI");
@@ -1985,7 +1986,7 @@ public sealed class MyCommand
 }
 ```
 
-2. **Register in Program.cs**:
+2. **Register in CliApp.cs**:
 
 ```csharp
 // Add using
