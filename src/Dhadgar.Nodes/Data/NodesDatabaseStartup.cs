@@ -18,19 +18,6 @@ public interface INodesDatabaseMigrator
 }
 
 /// <summary>
-/// Tracks whether the database has been migrated since this process started. The host is live before this is set.
-/// </summary>
-public sealed class NodesDatabaseReadiness
-{
-    private volatile bool _migrationsComplete;
-
-    /// <summary>True once the database is known to be migrated (or migrations never run in this environment).</summary>
-    public bool MigrationsComplete => _migrationsComplete;
-
-    internal void MarkMigrated() => _migrationsComplete = true;
-}
-
-/// <summary>
 /// Entity Framework implementation of <see cref="INodesDatabaseMigrator"/>. Creates its own scope per call.
 /// </summary>
 public sealed class EfNodesDatabaseMigrator(IServiceScopeFactory scopes) : INodesDatabaseMigrator
@@ -55,11 +42,11 @@ public sealed class EfNodesDatabaseMigrator(IServiceScopeFactory scopes) : INode
 
 /// <summary>
 /// Migrates the database in the background in Development, so the host starts while Postgres is still down.
-/// Outside Development it never migrates and marks the database ready at once.
+/// Outside Development it never migrates (D-ML232). Readiness is reported by <see cref="NodesDatabaseHealthCheck"/>,
+/// which reads the schema itself (D-ML290).
 /// </summary>
 public sealed class NodesDatabaseStartupService(
     IServiceScopeFactory scopes,
-    NodesDatabaseReadiness readiness,
     IHostEnvironment env,
     TimeProvider time,
     ILogger<NodesDatabaseStartupService> logger) : BackgroundService
@@ -72,7 +59,6 @@ public sealed class NodesDatabaseStartupService(
     {
         if (!env.IsDevelopment())
         {
-            readiness.MarkMigrated();
             return;
         }
 
@@ -84,7 +70,6 @@ public sealed class NodesDatabaseStartupService(
                 var result = await MigrateOnceAsync(stoppingToken);
                 if (result.IsSuccess)
                 {
-                    readiness.MarkMigrated();
                     logger.LogInformation("Nodes database migrations applied");
                     return;
                 }
@@ -114,7 +99,9 @@ public sealed class NodesDatabaseStartupService(
 }
 
 /// <summary>
-/// Readiness check for the Nodes database. Reports Unhealthy while migrations are pending or the database cannot be reached.
+/// Readiness check for the Nodes database. Reports Unhealthy while migrations are pending (any environment) or the
+/// database cannot be reached. Reads the schema on every probe rather than a startup flag, so it stays true after the
+/// database is migrated, rolled forward or recreated (D-ML290).
 /// </summary>
 public sealed class NodesDatabaseHealthCheck(IServiceScopeFactory scopes) : IHealthCheck
 {
@@ -167,7 +154,6 @@ public static class NodesDatabaseStartupExtensions
     /// <summary>Adds the Nodes database startup migration and its readiness check. Call after <c>AddDbContext&lt;NodesDbContext&gt;</c>.</summary>
     public static IServiceCollection AddNodesDatabaseStartup(this IServiceCollection services)
     {
-        services.TryAddSingleton<NodesDatabaseReadiness>();
         services.TryAddScoped<INodesDatabaseMigrator, EfNodesDatabaseMigrator>();
         services.AddHostedService<NodesDatabaseStartupService>();
         services.AddHealthChecks().AddCheck<NodesDatabaseHealthCheck>("nodes-database", tags: ["ready"]);

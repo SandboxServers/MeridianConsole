@@ -61,42 +61,44 @@ public sealed class NodesDatabaseStartupTests
     }
 
     [Fact]
-    public async Task StartupService_MigratorFailsThenSucceeds_BecomesReady()
+    public async Task StartupService_MigratorFailsThenSucceeds_StopsAfterThirdAttempt()
     {
         // Arrange
         var migrator = new FakeMigrator(failures: 2);
         var time = new FakeTimeProvider(DateTimeOffset.UtcNow);
-        var readiness = new NodesDatabaseReadiness();
         using var provider = BuildMigrationServices(migrator).BuildServiceProvider();
         var service = new NodesDatabaseStartupService(
             provider.GetRequiredService<IServiceScopeFactory>(),
-            readiness,
             new FakeHostEnvironment("Development"),
             time,
             NullLogger<NodesDatabaseStartupService>.Instance);
 
         // Act - first attempt fails and schedules a 1 s retry
         await service.StartAsync(CancellationToken.None);
+        var run = service.ExecuteTask!;
         await WaitUntilAsync(() => migrator.Calls == 1);
-        Assert.False(readiness.MigrationsComplete);
+        Assert.False(run.IsCompleted);
 
         // Second attempt fails and schedules a 2 s retry (fake time only; the real clock would take 1 s)
         time.Advance(TimeSpan.FromSeconds(1));
         await WaitUntilAsync(() => migrator.Calls == 2, TimeSpan.FromMilliseconds(750));
-        Assert.False(readiness.MigrationsComplete);
+        Assert.False(run.IsCompleted);
 
         // The second delay is 2 s: 1 s must not be enough
         time.Advance(TimeSpan.FromSeconds(1));
         await Task.Delay(100);
         Assert.Equal(2, migrator.Calls);
 
-        // Third attempt succeeds
+        // Third attempt succeeds and the service ends
         time.Advance(TimeSpan.FromSeconds(1));
-        await WaitUntilAsync(() => readiness.MigrationsComplete, TimeSpan.FromMilliseconds(750));
-
-        // Assert
+        await WaitUntilAsync(() => run.IsCompleted, TimeSpan.FromMilliseconds(750));
+        Assert.True(run.IsCompletedSuccessfully);
         Assert.Equal(3, migrator.Calls);
-        Assert.True(readiness.MigrationsComplete);
+
+        // No attempt after success
+        time.Advance(TimeSpan.FromSeconds(60));
+        await Task.Delay(100);
+        Assert.Equal(3, migrator.Calls);
 
         await service.StopAsync(CancellationToken.None);
     }
@@ -106,24 +108,22 @@ public sealed class NodesDatabaseStartupTests
     {
         // Arrange
         var migrator = new FakeMigrator(failures: 0);
-        var readiness = new NodesDatabaseReadiness();
         using var provider = BuildMigrationServices(migrator).BuildServiceProvider();
         var service = new NodesDatabaseStartupService(
             provider.GetRequiredService<IServiceScopeFactory>(),
-            readiness,
             new FakeHostEnvironment("Production"),
             new FakeTimeProvider(DateTimeOffset.UtcNow),
             NullLogger<NodesDatabaseStartupService>.Instance);
 
-        // Act - the Production path marks ready without awaiting, but poll (bounded) rather than assume the
-        // background task has already run when StartAsync returns
+        // Act - the Production path returns at once, but poll (bounded) for the background task to finish rather than
+        // assume it has already run when StartAsync returns
         await service.StartAsync(CancellationToken.None);
-        await WaitUntilAsync(() => readiness.MigrationsComplete);
+        await WaitUntilAsync(() => service.ExecuteTask!.IsCompleted);
         await service.StopAsync(CancellationToken.None);
 
         // Assert
         Assert.Equal(0, migrator.Calls);
-        Assert.True(readiness.MigrationsComplete);
+        Assert.True(service.ExecuteTask!.IsCompletedSuccessfully);
     }
 
     [Fact]

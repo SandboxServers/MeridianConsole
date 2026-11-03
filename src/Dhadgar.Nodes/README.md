@@ -684,7 +684,7 @@ docker run -p 5040:8080 \
 | `/livez` | Kubernetes liveness probe |
 | `/readyz` | Kubernetes readiness probe |
 
-The `nodes-database` check (tag `ready`) returns `Unhealthy` while the database is unreachable or migrations are pending, so `/readyz` answers 503. The host starts and `/livez` answers 200 without the database. In Development, migrations run in the background with a retry (1 s, doubling, capped at 30 s). Outside Development the service never migrates; the database must be migrated by the deployment pipeline.
+The `nodes-database` check (tag `ready`) returns `Unhealthy` while the database is unreachable or migrations are pending, so `/readyz` answers 503. The host starts and `/livez` answers 200 without the database. In Development, migrations run in the background with a retry (1 s, doubling, capped at 30 s). Outside Development the service never migrates; the database must be migrated by the deployment pipeline. Apply migrations before rolling out a new image: a pod whose schema is behind reports `database migrations pending` and stays not-ready (D-ML290).
 
 ---
 
