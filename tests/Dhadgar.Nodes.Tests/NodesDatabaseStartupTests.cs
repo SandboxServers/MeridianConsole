@@ -80,14 +80,19 @@ public sealed class NodesDatabaseStartupTests
         await WaitUntilAsync(() => migrator.Calls == 1);
         Assert.False(readiness.MigrationsComplete);
 
-        // Second attempt fails and schedules a 2 s retry
+        // Second attempt fails and schedules a 2 s retry (fake time only; the real clock would take 1 s)
         time.Advance(TimeSpan.FromSeconds(1));
-        await WaitUntilAsync(() => migrator.Calls == 2);
+        await WaitUntilAsync(() => migrator.Calls == 2, TimeSpan.FromMilliseconds(750));
         Assert.False(readiness.MigrationsComplete);
 
+        // The second delay is 2 s: 1 s must not be enough
+        time.Advance(TimeSpan.FromSeconds(1));
+        await Task.Delay(100);
+        Assert.Equal(2, migrator.Calls);
+
         // Third attempt succeeds
-        time.Advance(TimeSpan.FromSeconds(2));
-        await WaitUntilAsync(() => readiness.MigrationsComplete);
+        time.Advance(TimeSpan.FromSeconds(1));
+        await WaitUntilAsync(() => readiness.MigrationsComplete, TimeSpan.FromMilliseconds(750));
 
         // Assert
         Assert.Equal(3, migrator.Calls);
@@ -164,9 +169,9 @@ public sealed class NodesDatabaseStartupTests
         return services;
     }
 
-    private static async Task WaitUntilAsync(Func<bool> condition)
+    private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan? timeout = null)
     {
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var cts = new CancellationTokenSource(timeout ?? TimeSpan.FromSeconds(5));
         while (!condition())
         {
             await Task.Delay(10, cts.Token);
