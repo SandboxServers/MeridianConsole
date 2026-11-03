@@ -208,8 +208,9 @@ public sealed class EnrollmentService : IEnrollmentService
         _tokenService.MarkTokenUsed(token, node.Id);
 
         // Publish events BEFORE SaveChangesAsync for transactional outbox pattern.
-        // MassTransit stores messages in the outbox table, which are committed
-        // atomically with entity changes when SaveChangesAsync is called.
+        // MassTransit stores messages in the outbox table (NodesMessaging), which are committed
+        // atomically with entity changes when SaveChangesAsync is called. Delivery follows the commit
+        // by up to QueryDelay (1 s); a failed save delivers nothing.
         await _publishEndpoint.Publish(
             new NodeEnrolled(node.Id, token.OrganizationId, node.Platform, now),
             ct);

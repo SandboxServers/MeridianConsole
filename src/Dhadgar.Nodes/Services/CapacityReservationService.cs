@@ -39,34 +39,49 @@ public sealed class CapacityReservationService : ICapacityReservationService
         string? correlationId = null,
         CancellationToken ct = default)
     {
-        // Use serializable transaction to prevent concurrent overbooking
-        await using var transaction = await _dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
+        // Fixed before the strategy runs, so every attempt builds the same reservation and publishes the same event.
+        var reservationId = Guid.NewGuid();
+        var reservationToken = Guid.NewGuid();
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
+        var attempt = 0;
 
-        try
+        // A user-initiated transaction must run inside the execution strategy (the Nodes strategy retries).
+        var strategy = _dbContext.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async cancellationToken =>
         {
+            if (attempt++ > 0)
+            {
+                // A failed attempt left its reservation, the node it read and its outbox message tracked; start the retry clean,
+                // but keep the outbox state MassTransit cached for this scope (NodesChangeTrackerExtensions.ResetForRetry).
+                _dbContext.ResetForRetry();
+            }
+
+            // Use serializable transaction to prevent concurrent overbooking
+            await using var transaction = await _dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+
             // Validate node exists and is in a valid state for reservations
             var node = await _dbContext.Nodes
                 .Include(n => n.Capacity)
                 .Include(n => n.HardwareInventory)
-                .FirstOrDefaultAsync(n => n.Id == nodeId, ct);
+                .FirstOrDefaultAsync(n => n.Id == nodeId, cancellationToken);
 
             if (node is null)
             {
-                await transaction.RollbackAsync(ct);
+                await transaction.RollbackAsync(cancellationToken);
                 return ServiceResult.Fail<ReservationResponse>("node_not_found");
             }
 
             if (node.Status is NodeStatus.Offline or NodeStatus.Decommissioned or NodeStatus.Maintenance)
             {
-                await transaction.RollbackAsync(ct);
+                await transaction.RollbackAsync(cancellationToken);
                 return ServiceResult.Fail<ReservationResponse>("node_unavailable");
             }
 
             // Check if sufficient capacity is available (within the serializable transaction)
-            var availableCapacity = await GetAvailableCapacityInternalAsync(node, ct);
+            var availableCapacity = await GetAvailableCapacityInternalAsync(node, cancellationToken);
             if (availableCapacity is null)
             {
-                await transaction.RollbackAsync(ct);
+                await transaction.RollbackAsync(cancellationToken);
                 return ServiceResult.Fail<ReservationResponse>("capacity_data_missing");
             }
 
@@ -78,7 +93,7 @@ public sealed class CapacityReservationService : ICapacityReservationService
                 _logger.LogWarning(
                     "Insufficient memory for reservation on node {NodeId}. Requested: {RequestedMb}MB, Available: {AvailableMb}MB",
                     nodeId, memoryMb, availableCapacity.EffectiveAvailableMemoryBytes / (1024 * 1024));
-                await transaction.RollbackAsync(ct);
+                await transaction.RollbackAsync(cancellationToken);
                 return ServiceResult.Fail<ReservationResponse>("insufficient_memory");
             }
 
@@ -87,7 +102,7 @@ public sealed class CapacityReservationService : ICapacityReservationService
                 _logger.LogWarning(
                     "Insufficient disk for reservation on node {NodeId}. Requested: {RequestedMb}MB, Available: {AvailableMb}MB",
                     nodeId, diskMb, availableCapacity.EffectiveAvailableDiskBytes / (1024 * 1024));
-                await transaction.RollbackAsync(ct);
+                await transaction.RollbackAsync(cancellationToken);
                 return ServiceResult.Fail<ReservationResponse>("insufficient_disk");
             }
 
@@ -96,16 +111,15 @@ public sealed class CapacityReservationService : ICapacityReservationService
                 _logger.LogWarning(
                     "Insufficient CPU for reservation on node {NodeId}. Requested: {RequestedMillicores}m, Available: {AvailableMillicores}m",
                     nodeId, cpuMillicores, availableCapacity.EffectiveAvailableCpuMillicores);
-                await transaction.RollbackAsync(ct);
+                await transaction.RollbackAsync(cancellationToken);
                 return ServiceResult.Fail<ReservationResponse>("insufficient_cpu");
             }
 
-            var now = _timeProvider.GetUtcNow().UtcDateTime;
             var reservation = new CapacityReservation
             {
-                Id = Guid.NewGuid(),
+                Id = reservationId,
                 NodeId = nodeId,
-                ReservationToken = Guid.NewGuid(),
+                ReservationToken = reservationToken,
                 MemoryMb = memoryMb,
                 DiskMb = diskMb,
                 CpuMillicores = cpuMillicores,
@@ -118,10 +132,7 @@ public sealed class CapacityReservationService : ICapacityReservationService
 
             _dbContext.CapacityReservations.Add(reservation);
 
-            // Transactional Outbox Pattern: Publish BEFORE SaveChangesAsync.
-            // MassTransit's outbox stores the message in the same transaction as entity changes.
-            // If SaveChanges fails, both the entity and message are rolled back together,
-            // ensuring exactly-once delivery semantics.
+            // Transactional: the EF bus outbox (NodesMessaging) stores this publish with the reservation and delivers it after commit; fixed ids keep a retried attempt identical.
             await _publishEndpoint.Publish(new CapacityReserved(
                 nodeId,
                 reservation.ReservationToken,
@@ -129,10 +140,10 @@ public sealed class CapacityReservationService : ICapacityReservationService
                 diskMb,
                 cpuMillicores,
                 reservation.ExpiresAt,
-                requestedBy), ct);
+                requestedBy), cancellationToken);
 
-            await _dbContext.SaveChangesAsync(ct);
-            await transaction.CommitAsync(ct);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
 
             NodesMetrics.ReservationsCreated.Add(1);
 
@@ -141,12 +152,7 @@ public sealed class CapacityReservationService : ICapacityReservationService
                 reservation.ReservationToken, nodeId, memoryMb, diskMb);
 
             return ServiceResult.Ok(MapToResponse(reservation));
-        }
-        catch (Exception)
-        {
-            await transaction.RollbackAsync(ct);
-            throw;
-        }
+        }, ct);
     }
 
     public async Task<ServiceResult<ReservationResponse>> ClaimAsync(

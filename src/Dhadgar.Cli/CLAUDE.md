@@ -45,7 +45,7 @@ dhadgar --help
 1. Create Refit interface in `Infrastructure/Clients/I{Service}Api.cs`
 2. Update `ApiClientFactory.cs` with new client creation method
 3. Create command files in `Commands/{Service}/`
-4. Register commands in `Program.cs`
+4. Register commands in `CliApp.cs` (`BuildRoot`), and make the action `return await X.ExecuteAsync(...)`
 
 ## Dependencies
 

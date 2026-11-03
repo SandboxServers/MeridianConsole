@@ -29,14 +29,12 @@ public sealed class CapacityReservedConsumerTests
 
     private static CapacityReservedConsumer CreateConsumer(
         NodesDbContext context,
-        IPublishEndpoint publishEndpoint,
         IOptions<NodesOptions>? options = null,
         TimeProvider? timeProvider = null,
         ILogger<CapacityReservedConsumer>? logger = null)
     {
         return new CapacityReservedConsumer(
             context,
-            publishEndpoint,
             options ?? CreateOptions(),
             timeProvider ?? new FakeTimeProvider(DateTimeOffset.UtcNow),
             logger ?? Substitute.For<ILogger<CapacityReservedConsumer>>());
@@ -47,9 +45,8 @@ public sealed class CapacityReservedConsumerTests
     {
         // Arrange
         using var context = CreateContext();
-        var publishEndpoint = Substitute.For<IPublishEndpoint>();
         var logger = Substitute.For<ILogger<CapacityReservedConsumer>>();
-        var consumer = CreateConsumer(context, publishEndpoint, logger: logger);
+        var consumer = CreateConsumer(context, logger: logger);
 
         var nodeId = Guid.NewGuid();
         var reservationToken = Guid.NewGuid();
@@ -81,8 +78,7 @@ public sealed class CapacityReservedConsumerTests
     {
         // Arrange
         using var context = CreateContext();
-        var publishEndpoint = Substitute.For<IPublishEndpoint>();
-        var consumer = CreateConsumer(context, publishEndpoint);
+        var consumer = CreateConsumer(context);
 
         var message = new CapacityReserved(
             NodeId: Guid.NewGuid(),
@@ -101,7 +97,7 @@ public sealed class CapacityReservedConsumerTests
         // Assert - consumer completes without throwing and does not publish alerts
         // when node is not found (no seeded data). This verifies graceful handling
         // of reservations for unknown nodes.
-        await publishEndpoint.DidNotReceive().Publish(
+        await consumeContext.DidNotReceive().Publish(
             Arg.Any<NodeCapacityLow>(),
             Arg.Any<CancellationToken>());
     }
@@ -111,9 +107,8 @@ public sealed class CapacityReservedConsumerTests
     {
         // Arrange - seed a node with large capacity totals so the consumer's math actually runs
         using var context = CreateContext();
-        var publishEndpoint = Substitute.For<IPublishEndpoint>();
         var options = CreateOptions(lowCapacityThreshold: 80.0);
-        var consumer = CreateConsumer(context, publishEndpoint, options);
+        var consumer = CreateConsumer(context, options);
 
         var nodeId = Guid.NewGuid();
         var node = new Node
@@ -165,7 +160,7 @@ public sealed class CapacityReservedConsumerTests
         await consumer.Consume(consumeContext);
 
         // Assert - with plenty of capacity available, no low capacity alert should be published
-        await publishEndpoint.DidNotReceive().Publish(
+        await consumeContext.DidNotReceive().Publish(
             Arg.Any<NodeCapacityLow>(),
             Arg.Any<CancellationToken>());
     }
@@ -175,10 +170,9 @@ public sealed class CapacityReservedConsumerTests
     {
         // Arrange
         using var context = CreateContext();
-        var publishEndpoint = Substitute.For<IPublishEndpoint>();
         var options = CreateOptions(lowCapacityThreshold: 80.0);
         var timeProvider = new FakeTimeProvider(DateTimeOffset.UtcNow);
-        var consumer = CreateConsumer(context, publishEndpoint, options, timeProvider);
+        var consumer = CreateConsumer(context, options, timeProvider);
 
         // Seed a node with capacity data showing high usage (85% memory used)
         var nodeId = Guid.NewGuid();
@@ -231,7 +225,7 @@ public sealed class CapacityReservedConsumerTests
         await consumer.Consume(consumeContext);
 
         // Assert - should publish low capacity alert
-        await publishEndpoint.Received(1).Publish(
+        await consumeContext.Received(1).Publish(
             Arg.Is<NodeCapacityLow>(e =>
                 e.NodeId == nodeId &&
                 e.MemoryUsagePercent >= 80.0 &&
@@ -245,10 +239,9 @@ public sealed class CapacityReservedConsumerTests
         // Arrange - tests the disk-only branch of the OR condition:
         // (memoryUsagePercent >= threshold || diskUsagePercent >= threshold)
         using var context = CreateContext();
-        var publishEndpoint = Substitute.For<IPublishEndpoint>();
         var options = CreateOptions(lowCapacityThreshold: 80.0);
         var timeProvider = new FakeTimeProvider(DateTimeOffset.UtcNow);
-        var consumer = CreateConsumer(context, publishEndpoint, options, timeProvider);
+        var consumer = CreateConsumer(context, options, timeProvider);
 
         // Seed a node with high disk usage but low memory usage
         var nodeId = Guid.NewGuid();
@@ -303,7 +296,7 @@ public sealed class CapacityReservedConsumerTests
         await consumer.Consume(consumeContext);
 
         // Assert - should publish low capacity alert due to disk usage exceeding threshold
-        await publishEndpoint.Received(1).Publish(
+        await consumeContext.Received(1).Publish(
             Arg.Is<NodeCapacityLow>(e =>
                 e.NodeId == nodeId &&
                 e.DiskUsagePercent >= 80.0 &&
@@ -317,9 +310,8 @@ public sealed class CapacityReservedConsumerTests
     {
         // Arrange
         using var context = CreateContext();
-        var publishEndpoint = Substitute.For<IPublishEndpoint>();
         var options = CreateOptions(lowCapacityThreshold: 80.0);
-        var consumer = CreateConsumer(context, publishEndpoint, options);
+        var consumer = CreateConsumer(context, options);
 
         // Seed a node with capacity data showing low usage (50% used)
         var nodeId = Guid.NewGuid();
@@ -371,7 +363,7 @@ public sealed class CapacityReservedConsumerTests
         await consumer.Consume(consumeContext);
 
         // Assert - should NOT publish low capacity alert
-        await publishEndpoint.DidNotReceive().Publish(
+        await consumeContext.DidNotReceive().Publish(
             Arg.Any<NodeCapacityLow>(),
             Arg.Any<CancellationToken>());
     }
@@ -381,8 +373,7 @@ public sealed class CapacityReservedConsumerTests
     {
         // Arrange
         using var context = CreateContext();
-        var publishEndpoint = Substitute.For<IPublishEndpoint>();
-        var consumer = CreateConsumer(context, publishEndpoint);
+        var consumer = CreateConsumer(context);
 
         var message = new CapacityReserved(
             NodeId: Guid.NewGuid(), // Non-existent node
@@ -399,7 +390,7 @@ public sealed class CapacityReservedConsumerTests
         await consumer.Consume(consumeContext);
 
         // Assert - should NOT publish alert (node not found)
-        await publishEndpoint.DidNotReceive().Publish(
+        await consumeContext.DidNotReceive().Publish(
             Arg.Any<NodeCapacityLow>(),
             Arg.Any<CancellationToken>());
     }
@@ -409,8 +400,7 @@ public sealed class CapacityReservedConsumerTests
     {
         // Arrange
         using var context = CreateContext();
-        var publishEndpoint = Substitute.For<IPublishEndpoint>();
-        var consumer = CreateConsumer(context, publishEndpoint);
+        var consumer = CreateConsumer(context);
 
         // Seed a node without capacity data
         var nodeId = Guid.NewGuid();
@@ -441,7 +431,7 @@ public sealed class CapacityReservedConsumerTests
         await consumer.Consume(consumeContext);
 
         // Assert - should NOT publish alert (missing capacity data)
-        await publishEndpoint.DidNotReceive().Publish(
+        await consumeContext.DidNotReceive().Publish(
             Arg.Any<NodeCapacityLow>(),
             Arg.Any<CancellationToken>());
     }

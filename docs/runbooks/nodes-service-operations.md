@@ -379,7 +379,7 @@ dotnet ef migrations list \
   --startup-project src/Dhadgar.Nodes
 ```
 
-**Note:** Migrations auto-apply in Development mode.
+**Note:** Migrations auto-apply (in the background, with retry) only in Development. Elsewhere apply them before rolling out a new image: Nodes reports not-ready while any migration is pending.
 
 ## Performance Monitoring
 
