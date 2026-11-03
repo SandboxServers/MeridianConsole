@@ -25,6 +25,7 @@ Built with [Spectre.Console](https://spectreconsole.net/) for gorgeous terminal 
    - [Key Vault Commands](#key-vault-commands)
    - [Gateway Commands](#gateway-commands)
    - [Utility Commands](#utility-commands)
+   - [Nodes List](#nodes-list)
 8. [API Clients](#api-clients)
 9. [Authentication Flow](#authentication-flow)
 10. [Output Formatting](#output-formatting)
