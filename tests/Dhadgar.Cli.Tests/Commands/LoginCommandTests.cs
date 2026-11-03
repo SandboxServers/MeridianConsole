@@ -45,13 +45,15 @@ public sealed class LoginCommandTests : IDisposable
         }.Save();
 
         using var identity = new OneShotIdentityListener("HTTP/1.1 400 Bad Request", "{\"error\":\"invalid_client\"}");
+        using var error = new StringWriter();
 
         var exitCode = await CliApp.BuildRoot()
             .Parse(["auth", "login", "--client-id", DummyClientId, "--client-secret", DummyClientSecret,
                 "--identity-url", $"http://127.0.0.1:{identity.Port}"])
-            .InvokeAsync();
+            .InvokeAsync(new System.CommandLine.InvocationConfiguration { Error = error });
 
         exitCode.Should().Be(1);
+        error.ToString().Should().BeEmpty();
         CliConfig.Load().AccessToken.Should().Be("stored");
     }
 
@@ -64,12 +66,15 @@ public sealed class LoginCommandTests : IDisposable
             TokenExpiresAt = DateTime.UtcNow.AddHours(1)
         }.Save();
 
+        using var error = new StringWriter();
+
         var exitCode = await CliApp.BuildRoot()
             .Parse(["auth", "login", "--client-id", DummyClientId, "--client-secret", DummyClientSecret,
                 "--identity-url", "http://127.0.0.1:1"])
-            .InvokeAsync();
+            .InvokeAsync(new System.CommandLine.InvocationConfiguration { Error = error });
 
         exitCode.Should().Be(1);
+        error.ToString().Should().BeEmpty("a refused connection must be handled, not escape as an unhandled exception");
         CliConfig.Load().AccessToken.Should().Be("stored");
     }
 

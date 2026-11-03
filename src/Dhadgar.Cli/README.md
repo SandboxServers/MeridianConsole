@@ -1873,9 +1873,11 @@ export DHADGAR_CLI_DEBUG=1
 | Code | Meaning |
 |------|---------|
 | 0 | Success |
-| 1 | General error (not authenticated, API error, network error, invalid input) |
+| 1 | General error (not authenticated, network error in `ping`, invalid input, login failure) |
 
 Every command returns its exit code to the shell. Argument parse errors keep System.CommandLine's own codes (1 or 2).
+
+Known gap (follow-up): commands that catch `ApiException` inside `AnsiConsole.Status().StartAsync(...)` print the error but still exit 0 on API errors. Scripts must not rely on their exit code for API failures.
 
 Commands return meaningful exit codes for scripting:
 

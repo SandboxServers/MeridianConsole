@@ -100,7 +100,21 @@ var authCmd = new Command("auth", "Authentication and token management");
 var authLoginCmd = new Command("login", "Authenticate with the Identity service");
 var clientIdOpt = new Option<string?>("--client-id") { Description = "Client ID (defaults to dev-client)" };
 var clientSecretOpt = new Option<string?>("--client-secret") { Description = "Client secret (defaults to dev-secret)" };
-var identityUrlOpt = new Option<Uri?>("--identity-url") { Description = "Identity service URL" };
+var identityUrlOpt = new Option<Uri?>("--identity-url")
+{
+    Description = "Identity service URL",
+    CustomParser = result =>
+    {
+        var raw = result.Tokens.Single().Value;
+        if (Uri.TryCreate(raw, UriKind.Absolute, out var uri))
+        {
+            return uri;
+        }
+
+        result.AddError($"Invalid Identity URL: '{raw}'");
+        return null;
+    }
+};
 authLoginCmd.Options.Add(clientIdOpt);
 authLoginCmd.Options.Add(clientSecretOpt);
 authLoginCmd.Options.Add(identityUrlOpt);

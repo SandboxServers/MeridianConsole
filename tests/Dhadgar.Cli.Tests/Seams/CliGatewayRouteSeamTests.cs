@@ -1,7 +1,9 @@
+using System.Net;
 using System.Text.Json;
 using Dhadgar.Cli.Configuration;
 using Dhadgar.Cli.Infrastructure.Clients;
 using FluentAssertions;
+using Refit;
 using Xunit;
 
 namespace Dhadgar.Cli.Tests.Seams;
@@ -40,6 +42,62 @@ public sealed class CliGatewayRouteSeamTests
         route.Should().NotBeNull($"no Gateway route matches {requestPath}");
         route!.ClusterId.Should().Be("nodes");
         route.ForwardedPath.Should().Be($"/organizations/{OrgId}/nodes");
+    }
+
+    [Fact]
+    public async Task TokenRequest_ThroughRefit_SendsBasePathPlusConnectToken()
+    {
+        var capture = new CaptureHandler();
+        using var http = new HttpClient(capture) { BaseAddress = new Uri(new CliConfig().EffectiveIdentityUrl) };
+
+        try
+        {
+            await RestService.For<IIdentityApi>(http)
+                .GetTokenAsync(new Dictionary<string, string> { ["grant_type"] = "client_credentials" }, CancellationToken.None);
+        }
+        catch (ApiException)
+        {
+            // The stub answers 400; only the request URI matters here.
+        }
+
+        capture.RequestUri.Should().NotBeNull();
+        capture.RequestUri!.AbsolutePath.Should().Be("/api/v1/identity/connect/token");
+        GatewayRoutes.Resolve(capture.RequestUri.AbsolutePath)!.ForwardedPath.Should().Be("/connect/token");
+    }
+
+    [Fact]
+    public async Task NodesList_ThroughRefit_SendsBasePathPlusOrganizationNodes()
+    {
+        var capture = new CaptureHandler();
+        using var http = new HttpClient(capture) { BaseAddress = new Uri(new CliConfig().EffectiveNodesUrl) };
+
+        try
+        {
+            await RestService.For<INodesApi>(http).GetNodesAsync(OrgId, null, null, null, CancellationToken.None);
+        }
+        catch (ApiException)
+        {
+            // The stub answers 400; only the request URI matters here.
+        }
+
+        capture.RequestUri.Should().NotBeNull();
+        capture.RequestUri!.AbsolutePath.Should().Be($"/api/v1/organizations/{OrgId}/nodes");
+        GatewayRoutes.Resolve(capture.RequestUri!.AbsolutePath)!.ClusterId.Should().Be("nodes");
+    }
+
+    private sealed class CaptureHandler : HttpMessageHandler
+    {
+        public Uri? RequestUri { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            RequestUri = request.RequestUri;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.BadRequest)
+            {
+                Content = new StringContent("{}"),
+                RequestMessage = request
+            });
+        }
     }
 
     /// <summary>The Refit path literal of one method, read from its attribute.</summary>

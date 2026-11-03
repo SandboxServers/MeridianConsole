@@ -101,7 +101,7 @@ public sealed class LoginCommand
                         AnsiConsole.MarkupLine($"[red]Authentication failed:[/] {(int)ex.StatusCode} {ex.StatusCode}");
                         WriteSafeApiErrorDetails(ex);
                     }
-                    catch (HttpRequestException ex)
+                    catch (Exception ex) when (ex is HttpRequestException or ApiRequestException)
                     {
                         AnsiConsole.MarkupLine($"[red]Authentication failed:[/] could not reach Identity ({Markup.Escape(ex.Message)})");
                     }
