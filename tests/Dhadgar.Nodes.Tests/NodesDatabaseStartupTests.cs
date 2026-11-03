@@ -1,0 +1,198 @@
+using System.Net;
+using System.Text.Json;
+using Dhadgar.Nodes.Data;
+using Dhadgar.Shared.Results;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
+
+namespace Dhadgar.Nodes.Tests;
+
+[Collection("Nodes Integration")]
+public sealed class NodesDatabaseStartupTests
+{
+    // Never connected to by a passing run: port 1 is closed by design.
+    private const string UnreachableConnectionString =
+        "Host=127.0.0.1;Port=1;Database=nodes;Username=u;Password=p;Timeout=1;Command Timeout=1";
+
+    [Fact]
+    public async Task Host_DatabaseUnreachable_StartsLiveAndNotReady()
+    {
+        // Arrange - the production Npgsql registration, pointed at a closed port, in Development
+        using var factory = new NodesWebApplicationFactory { UseProductionDbContext = true };
+        factory.Settings["ConnectionStrings:Postgres"] = UnreachableConnectionString;
+        using var host = factory.WithWebHostBuilder(b => b
+            .UseEnvironment("Development")
+            .ConfigureTestServices(s => s.AddNodesDatabaseStartup()));
+        using var client = host.CreateClient();
+
+        // Act + Assert - live answers at once
+        using var live = await client.GetAsync("/livez");
+        Assert.Equal(HttpStatusCode.OK, live.StatusCode);
+
+        // Act - readiness turns 503 once the probe fails (polled, the background migration runs concurrently)
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var ready = await client.GetAsync("/readyz", cts.Token);
+        while (ready.StatusCode != HttpStatusCode.ServiceUnavailable)
+        {
+            ready.Dispose();
+            await Task.Delay(100, cts.Token);
+            ready = await client.GetAsync("/readyz", cts.Token);
+        }
+
+        // Assert
+        using (ready)
+        {
+            var body = await ready.Content.ReadAsStringAsync(cts.Token);
+            using var json = JsonDocument.Parse(body);
+            var status = json.RootElement.GetProperty("checks").GetProperty("nodes-database").GetProperty("status").GetString();
+            Assert.Equal("Unhealthy", status);
+            Assert.DoesNotContain("Npgsql", body, StringComparison.Ordinal);
+            Assert.DoesNotContain("Host=", body, StringComparison.Ordinal);
+            Assert.DoesNotContain("Password", body, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public async Task StartupService_MigratorFailsThenSucceeds_BecomesReady()
+    {
+        // Arrange
+        var migrator = new FakeMigrator(failures: 2);
+        var time = new FakeTimeProvider(DateTimeOffset.UtcNow);
+        var readiness = new NodesDatabaseReadiness();
+        using var provider = BuildMigrationServices(migrator).BuildServiceProvider();
+        var service = new NodesDatabaseStartupService(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            readiness,
+            new FakeHostEnvironment("Development"),
+            time,
+            NullLogger<NodesDatabaseStartupService>.Instance);
+
+        // Act - first attempt fails and schedules a 1 s retry
+        await service.StartAsync(CancellationToken.None);
+        await WaitUntilAsync(() => migrator.Calls == 1);
+        Assert.False(readiness.MigrationsComplete);
+
+        // Second attempt fails and schedules a 2 s retry
+        time.Advance(TimeSpan.FromSeconds(1));
+        await WaitUntilAsync(() => migrator.Calls == 2);
+        Assert.False(readiness.MigrationsComplete);
+
+        // Third attempt succeeds
+        time.Advance(TimeSpan.FromSeconds(2));
+        await WaitUntilAsync(() => readiness.MigrationsComplete);
+
+        // Assert
+        Assert.Equal(3, migrator.Calls);
+        Assert.True(readiness.MigrationsComplete);
+
+        await service.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task StartupService_NotDevelopment_NeverMigrates()
+    {
+        // Arrange
+        var migrator = new FakeMigrator(failures: 0);
+        var readiness = new NodesDatabaseReadiness();
+        using var provider = BuildMigrationServices(migrator).BuildServiceProvider();
+        var service = new NodesDatabaseStartupService(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            readiness,
+            new FakeHostEnvironment("Production"),
+            new FakeTimeProvider(DateTimeOffset.UtcNow),
+            NullLogger<NodesDatabaseStartupService>.Instance);
+
+        // Act - the Production path marks ready without awaiting, but poll (bounded) rather than assume the
+        // background task has already run when StartAsync returns
+        await service.StartAsync(CancellationToken.None);
+        await WaitUntilAsync(() => readiness.MigrationsComplete);
+        await service.StopAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Equal(0, migrator.Calls);
+        Assert.True(readiness.MigrationsComplete);
+    }
+
+    [Fact]
+    public async Task HealthCheck_MigrationsPending_IsUnhealthy()
+    {
+        // Arrange - SQLite is relational, and nothing has been migrated, so every migration is pending
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        var services = new ServiceCollection();
+        services.AddDbContext<NodesDbContext>(o => o.UseSqlite(connection));
+        using var provider = services.BuildServiceProvider();
+        var check = new NodesDatabaseHealthCheck(provider.GetRequiredService<IServiceScopeFactory>());
+
+        // Act
+        var result = await check.CheckHealthAsync(new HealthCheckContext(), CancellationToken.None);
+
+        // Assert
+        Assert.Equal(HealthStatus.Unhealthy, result.Status);
+        Assert.Equal("database migrations pending", result.Description);
+    }
+
+    [Fact]
+    public async Task HealthCheck_Migrated_InMemory_IsHealthy()
+    {
+        // Arrange - InMemory is not relational (no migrations to check) and CanConnectAsync is true
+        var services = new ServiceCollection();
+        services.AddDbContext<NodesDbContext>(o => o.UseInMemoryDatabase($"nodes-health-{Guid.NewGuid()}"));
+        using var provider = services.BuildServiceProvider();
+        var check = new NodesDatabaseHealthCheck(provider.GetRequiredService<IServiceScopeFactory>());
+
+        // Act
+        var result = await check.CheckHealthAsync(new HealthCheckContext(), CancellationToken.None);
+
+        // Assert
+        Assert.Equal(HealthStatus.Healthy, result.Status);
+    }
+
+    private static ServiceCollection BuildMigrationServices(INodesDatabaseMigrator migrator)
+    {
+        // Scoped, as the production registration is, so the startup service's per-attempt scope is exercised
+        var services = new ServiceCollection();
+        services.AddScoped(_ => migrator);
+        return services;
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition)
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        while (!condition())
+        {
+            await Task.Delay(10, cts.Token);
+        }
+    }
+
+    private sealed class FakeMigrator(int failures) : INodesDatabaseMigrator
+    {
+        private int _calls;
+
+        public int Calls => Volatile.Read(ref _calls);
+
+        public Task<Result> MigrateAsync(CancellationToken ct)
+        {
+            var call = Interlocked.Increment(ref _calls);
+            return Task.FromResult(call <= failures
+                ? Result.Failure("[Nodes.DatabaseUnavailable] test failure")
+                : Result.Success());
+        }
+    }
+
+    private sealed class FakeHostEnvironment(string environmentName) : IHostEnvironment
+    {
+        public string EnvironmentName { get; set; } = environmentName;
+        public string ApplicationName { get; set; } = "Dhadgar.Nodes.Tests";
+        public string ContentRootPath { get; set; } = AppContext.BaseDirectory;
+        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
+    }
+}

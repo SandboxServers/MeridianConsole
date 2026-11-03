@@ -37,7 +37,7 @@ Hardware inventory, agent enrollment, and health monitoring for customer-owned n
 
 ## Notes
 
-- Auto-applies migrations in Development mode
+- Applies migrations in the background in Development mode (retrying while the database is down); never outside Development. `/readyz` is 503 until the database answers (`nodes-database` check)
 - Stale nodes marked offline after 5 minutes without heartbeat
 - Enrollment tokens default to 1 hour validity
 - Agent certificates valid for 90 days

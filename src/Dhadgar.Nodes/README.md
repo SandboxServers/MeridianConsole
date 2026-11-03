@@ -414,7 +414,7 @@ dotnet ef database update \
   --startup-project src/Dhadgar.Nodes
 ```
 
-**Note:** Migrations are auto-applied in Development mode.
+**Note:** Migrations are applied in the background in Development mode, with retry while the database is down (`NodesDatabaseStartupService`). They are not applied outside Development.
 
 Recent migrations:
 
@@ -683,6 +683,8 @@ docker run -p 5040:8080 \
 | `/healthz` | Full health check |
 | `/livez` | Kubernetes liveness probe |
 | `/readyz` | Kubernetes readiness probe |
+
+The `nodes-database` check (tag `ready`) returns `Unhealthy` while the database is unreachable or migrations are pending, so `/readyz` answers 503. The host starts and `/livez` answers 200 without the database. In Development, migrations run in the background with a retry (1 s, doubling, capped at 30 s). Outside Development the service never migrates; the database must be migrated by the deployment pipeline.
 
 ---
 
