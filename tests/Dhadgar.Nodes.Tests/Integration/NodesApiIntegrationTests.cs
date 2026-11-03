@@ -217,6 +217,24 @@ public sealed class NodesApiIntegrationTests
     }
 
     [Fact]
+    public async Task UpdateNodeTags_ReturnsNodeDetailResponse()
+    {
+        var orgId = Guid.NewGuid();
+        var node = await _factory.SeedNodeAsync(orgId, "tags-node", NodeStatus.Online);
+        using var client = _factory.CreateAuthenticatedClient(TestUserId, orgId);
+
+        var response = await client.PutAsJsonAsync(
+            $"/organizations/{orgId}/nodes/{node.Id}/tags", new { Tags = new[] { "prod", "eu" } });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var result = await response.Content.ReadFromJsonAsync<Dhadgar.Contracts.Nodes.NodeDetailResponse>();
+        Assert.NotNull(result);
+        Assert.Equal(node.Id.ToString(), result.Id);
+        Assert.Equal(nameof(NodeStatus.Online), result.Status);
+        Assert.Equal(new[] { "eu", "prod" }.OrderBy(x => x), result.Tags!.OrderBy(x => x));
+    }
+
+    [Fact]
     public async Task UpdateNode_NonExistentNode_ReturnsNotFound()
     {
         var orgId = Guid.NewGuid();
