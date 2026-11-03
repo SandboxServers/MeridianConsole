@@ -23,7 +23,7 @@ namespace Dhadgar.AgentSeam.Tests;
 /// is the red seam: it fails with 403 until Identity puts the bound organization on the token.
 /// Tokens and secrets are never logged or printed; failed assertions show status codes only.
 /// </summary>
-public sealed class IdentityClientCredentialsSeamTests : IAsyncLifetime
+public sealed class IdentityClientCredentialsSeamTests : IAsyncLifetime, IDisposable
 {
     private const string BoundClientId = "seam-bound";
     private const string UnboundClientId = "seam-unbound";
@@ -39,6 +39,7 @@ public sealed class IdentityClientCredentialsSeamTests : IAsyncLifetime
     private GatewayNodesHarness? _harness;
     private string _boundToken = string.Empty;
     private string _unboundToken = string.Empty;
+    private bool _disposed;
 
     private GatewayNodesHarness Harness => _harness ?? throw new InvalidOperationException("InitializeAsync has not run.");
 
@@ -66,6 +67,18 @@ public sealed class IdentityClientCredentialsSeamTests : IAsyncLifetime
 
     public Task DisposeAsync()
     {
+        Dispose();
+        return Task.CompletedTask;
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
         _harness?.Dispose();
         _identity?.Dispose();
         try
@@ -76,8 +89,6 @@ public sealed class IdentityClientCredentialsSeamTests : IAsyncLifetime
         {
             // best-effort cleanup
         }
-
-        return Task.CompletedTask;
     }
 
     [Fact]
