@@ -72,7 +72,7 @@
     <PackageVersion Include="MailKit" Version="4.18.2" />
 
     <!-- Observability -->
-    <PackageVersion Include="Microsoft.Extensions.Compliance.Redaction" Version="10.11.0" />
+    <PackageVersion Include="Microsoft.Extensions.Compliance.Redaction" Version="11.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Telemetry" Version="10.11.0" />
     <!-- Core OpenTelemetry line held at >= 1.15.3: patches GHSA-4625-4j76-fww9, GHSA-mr8r-92fq-pj8p,
          GHSA-q834-8qmm-v933 (OTLP exporter) and GHSA-g94r-2vxg-569j (Api) -->
