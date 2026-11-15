@@ -69,7 +69,7 @@
     <PackageVersion Include="Microsoft.Graph" Version="6.9.0" />
     <!-- >= 4.16.0 patches GHSA-9j88-vvj5-vhgr (MailKit) and floors MimeKit at 4.16.0,
          past GHSA-g7hc-96xr-gvvx (patched at 4.15.1) -->
-    <PackageVersion Include="MailKit" Version="4.18.2" />
+    <PackageVersion Include="MailKit" Version="5.0.0" />
 
     <!-- Observability -->
     <PackageVersion Include="Microsoft.Extensions.Compliance.Redaction" Version="10.11.0" />
