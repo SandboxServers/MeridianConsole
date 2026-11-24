@@ -2,7 +2,9 @@
 
 **Goal (D-01, owner-approved MVP):** login → Panel → enroll a real Windows agent → create/start/stop one Minecraft server on that node → live console tail. Deployable with `deploy/compose/docker-compose.services.yml` plus the Windows agent. No billing, no Linux agent, Minecraft only (hardcoded, no engine abstraction).
 
-**Base:** `origin/main` at `101c36d` (2026-10-28). Wave 1 is fully merged (table below), and so are Wave 2 stage 1's VS-34, VS-11, VS-32R and VS-07R plus hotfixes HF-01 and HF-02D (#238 to #243, merged 2026-10-28 19:53-19:55 UTC by `BangRocket`). Earlier history: Sprint 2 `6df3338` (PR #235; D-25), then #233, #230, #231 and #236, merged 2026-10-27 without the owner's go-ahead (ruling § 9). Only the owner's main session merges, and only after the owner says yes to that PR (D-41). Wave 1 was written on `2c4c19c` (PR #187, D-04). Main reaches every PR branch, the ledger branch included, by `git merge origin/main`, never by rebase or force-push (D-38).
+**Base (refreshed 2026-11-24):** `origin/main` at `a5d408c` (2026-11-03). Wave 2 is fully merged (table below). Since then `main` has taken only meridian-lab product fixes (#256 to #261, outside this campaign) and Dependabot bumps; no campaign work has run since 2026-11-01. Next: contract sync 2, then Wave 3.
+
+**Base (as of 2026-10-28):** `origin/main` at `101c36d` (2026-10-28). Wave 1 is fully merged (table below), and so are Wave 2 stage 1's VS-34, VS-11, VS-32R and VS-07R plus hotfixes HF-01 and HF-02D (#238 to #243, merged 2026-10-28 19:53-19:55 UTC by `BangRocket`). Earlier history: Sprint 2 `6df3338` (PR #235; D-25), then #233, #230, #231 and #236, merged 2026-10-27 without the owner's go-ahead (ruling § 9). Only the owner's main session merges, and only after the owner says yes to that PR (D-41). Wave 1 was written on `2c4c19c` (PR #187, D-04). Main reaches every PR branch, the ledger branch included, by `git merge origin/main`, never by rebase or force-push (D-38).
 
 **Recovery (2026-10-28):** a cloud orchestrator session ran Wave 2 and died; its ledger edits after the 2026-10-27 RESUME were lost. This ledger was rebuilt from that session's transcript (`.claude/reports/vertical-slice/cloud-session-transcript.md` in the `vertical-slice-ledger2` worktree), the bodies and commits of PRs #238 to #243, and the `vs/*` branches. Entries marked "(reconstructed 2026-10-28)" carry less detail than the lost originals. The FU-41a security report was not recovered; its note numbers (N1 to N5) survive only where a PR or commit cites them.
 
@@ -18,6 +20,18 @@
 | #232 | VS-01 | `9a958f4` | Cadacious, 2026-10-28 00:13 |
 | #229 | VS-03 + VS-03R (head `b8f118d`) | `398e906` | Cadacious, 2026-10-28 00:19 |
 | #237 | L09f `RabbitMq:Port` (outside the campaign) | `c5ca3c4` | Cadacious, 2026-10-28 02:15 |
+
+**Wave 2, merged** (stage 1 is in the base line above; stage 2 below, in actual merge order, which differs from the planned order in the 2026-10-28 RESUME):
+
+| PR | Packet | Merged as | Merged by, when (UTC) |
+| --- | --- | --- | --- |
+| #244 | ledger rebuild | `8bbd913` | Cadacious, 2026-11-01 14:46 |
+| #245 | VS-36 | `1fc9a18` | Cadacious, 2026-11-01 14:46 |
+| #246 | VS-35 | `a412eb4` | Cadacious, 2026-11-01 14:46 |
+| #248 | HF-02 | `fddf0f7` | Cadacious, 2026-11-01 14:47 |
+| #249 | VS-08R | `722df33` | Cadacious, 2026-11-01 14:47 |
+| #250 | VS-09 | `ef764e5` | Cadacious, 2026-11-01 14:47 |
+| #247 | VS-06R | `37560f0` | Cadacious, 2026-11-01 14:54 |
 
 **Sprint 2 reconcile (2026-10-27):** [worknotes/sprint2-reconcile-ruling.md](worknotes/sprint2-reconcile-ruling.md) rules on #229-#234 and wave 2. Where Sprint 2 and this ledger disagree, Sprint 2 wins (D-25); findings F-01 to F-07 and F-20 are partly fixed on `main` (F-30).
 
@@ -120,6 +134,7 @@ Evidence paths are relative to the repo root at `2c4c19c`; `#88:` means PR #88 h
 | D-49 | **BetterAuth fails closed on trusted origins outside development (owner, 2026-10-28).** When `NODE_ENV` is not `development` (unset counts as not development), BetterAuth refuses to start if `BETTER_AUTH_TRUSTED_ORIGINS` is empty, contains `*`, or holds an entry that is not an exact origin. Its CORS never allows an unlisted origin outside development. This mirrors the Gateway's `CorsConfiguration`. | Decided (owner, 2026-10-28; text reconstructed 2026-10-28); HF-02 | F-32: an empty variable silently allowed every origin with credentials. |
 | D-50 | **Remove `http://localhost:4322` from every allowed-origin list (owner, 2026-10-28):** Gateway `Cors:AllowedOrigins`, compose `BETTER_AUTH_TRUSTED_ORIGINS`, and the docs that list them. `http://localhost:4321` (the Panel) stays. | Decided (owner, 2026-10-28; text reconstructed 2026-10-28); HF-02 | 4322 was the parked ShoppingCart's dev port (D-03); a credentialed origin for a site nobody runs is attack surface on a developer's machine. |
 | D-51 | **Cady (`Cadacious`) merges the campaign PRs (amends D-41, owner, 2026-10-28).** Sessions stop every PR at "ready to merge" (green CI, review and security `ship`, `security-review` label) and hand it to Cady in the ledger's merge order. No session merges. A session may still merge `main` into a waiting PR branch (D-38) so it stays mergeable. | Decided (owner, 2026-10-28) | The owner wants a human co-owner to take each merge. |
+| D-52 | **Joshua (`BangRocket`) also merges campaign PRs (amends D-51, owner, 2026-11-24).** Either Cady (`Cadacious`) or Joshua (`BangRocket`) takes a "ready to merge" PR in the ledger's merge order. Sessions still never merge on their own initiative and still stop every PR at "ready to merge" (D-41, D-51). | Decided (owner, 2026-11-24) | The owner restarted the project after the 2026-11-03 to 2026-11-24 pause and said he can merge campaign PRs. |
 
 ## Seam tests (acceptance)
 
@@ -163,16 +178,16 @@ Status words: Ready, BlockedDependency, BlockedDecision, Writing, Review, Integr
 | VS-34 | 1 | Fold Seams.Tests into AgentSeam.Tests; remove `IHubConnectionConfigurator` (D-42) | - | Yes | Done: #239 merged as `05a69d2` |
 | HF-01 | hotfix | Drop parked `cart.meridianconsole.com` origin and dead `firewall` OpenAPI mapping (FU-41a N5) | - | Yes | Done: #238 merged as `28c23a3` |
 | HF-02D | hotfix | DNS script: explicit records, no wildcard (D-48 b, OD-4) | - | Yes | Integrated: #240 merged as `101c36d`. **Owner step owed:** run the Cloudflare change from the HF-02D checklist (dev, staging, prod). The checklist was in the lost `vertical-slice-hf02d` worktree's `HF-02D-coder.md`; HF-02's packet carries a rebuilt one. |
-| HF-02 | hotfix | Host-only BetterAuth cookie, fail-closed trusted origins, drop `localhost:4322` (D-48 a, D-49, D-50) | HF-01 (merged) | Yes | Ready: the first coder's work (`cdd5dac`, both reviews `ship`) was never pushed and is lost; re-run from the rebuilt spec on `main` `101c36d` |
-| VS-06R | 2 | Nodes user JWT, default scheme selector, strict `AgentPolicy`, user-JWT seam | VS-32R, VS-07R (both merged) | Yes | Ready (FU-41a additions to this packet were lost; see its note) |
+| HF-02 | hotfix | Host-only BetterAuth cookie, fail-closed trusted origins, drop `localhost:4322` (D-48 a, D-49, D-50) | HF-01 (merged) | Yes | Done: #248 merged as `fddf0f7`. **Deploy gate (owner, 2026-11-24):** HF-02 steps 2 and 3 (trusted origins set, then `DELETE FROM "session"` or rotate `BETTER_AUTH_SECRET`) and HF-02D's Cloudflare change are owed before the next deploy to dev, staging or prod; not needed while nothing is deployed |
+| VS-06R | 2 | Nodes user JWT, default scheme selector, strict `AgentPolicy`, user-JWT seam | VS-32R, VS-07R (both merged) | Yes | Done: #247 merged as `37560f0` |
 | VS-07R | 2 | Gateway CA route, org route shapes, recording forwarder, CA seam; reservations block (D-45); JWT `Agent` identity removed | W1, FU-41a | Yes | Done: #242 merged as `300bc33` |
-| VS-08R | 2 | Nodes hub: registry, connect-time node check, 512 KiB frames, `Telemetry` | W1 | Yes | Ruling: `vs/08-agent-hub-registry` at `5aaeeea` (local, no PR); security `ship` (pass 2); packet review `fix` at pass 3 (CA1305 in tests under `CI=true`) → re-spec in [worknotes/VS-08R.md](worknotes/VS-08R.md), then one ruling check. Abort-on-decommission deferred to VS-33 |
-| VS-09 | 2 | Command signing on the control plane; key in enrollment response and agent state | W1 | Yes | Writing: the first run's part 1 and continuation were never pushed and are lost; a fresh coder is running in `vertical-slice-vs09` on base `c5ca3c4` (merge `main` before review) |
+| VS-08R | 2 | Nodes hub: registry, connect-time node check, 512 KiB frames, `Telemetry` | W1 | Yes | Done: #249 merged as `722df33`. Abort-on-decommission deferred to VS-33 |
+| VS-09 | 2 | Command signing on the control plane; key in enrollment response and agent state | W1 | Yes | Done: #250 merged as `ef764e5` (control-plane side; agent-side verification is VS-14, #94 stays open) |
 | VS-10 | 2 | Certificate renewal on the agent-held-key path | - | Yes | Superseded by Sprint 2 (D-36) |
 | VS-11 | 2 | Import Servers from PR #88 | W1 | Yes | Done: #241 merged as `cada473` (D-47) |
 | VS-32R | 2 | `SeamJwt` in `src/Shared/Dhadgar.Testing` (D-43); access tokens never reach traces | W1 | Yes | Done: #243 merged as `a859315` |
-| VS-35 | 2 | Gateway auth-separation tests: user JWT vs agent certificate, query token, logs (FU-41a) | VS-32R, VS-07R (both merged) | Yes | Ready |
-| VS-36 | 2 | Lock down Nodes reservation-token endpoints to the owning org; refuse agent identities (F-35) | - (VS-06R touches `Program.cs`; whichever merges second resolves) | Yes | Ready |
+| VS-35 | 2 | Gateway auth-separation tests: user JWT vs agent certificate, query token, logs (FU-41a) | VS-32R, VS-07R (both merged) | Yes | Done: #246 merged as `a412eb4` |
+| VS-36 | 2 | Lock down Nodes reservation-token endpoints to the owning org; refuse agent identities (F-35) | - (VS-06R touches `Program.cs`; whichever merges second resolves) | Yes | Done: #245 merged as `1fc9a18` |
 | VS-12 | 3 | Agent identity store and live options (#101): shrinks (D-37) | W2, contract sync 2 | Yes | BlockedDependency |
 | VS-13 | 3 | Agent client on the typed hub contract | VS-12, VS-15, contract sync 2 | Yes | BlockedDependency |
 | VS-14 | 3 | Agent signature verification and replay cache (#94) | VS-12, contract sync 2 | Yes | BlockedDependency |
@@ -201,6 +216,6 @@ Open owner decisions (Sprint 2 reconcile ruling § 5):
 - **OD-2 (decided 2026-10-27):** the owner chose lenient agent JSON. It is recorded as D-40, which supersedes D-21.
 - **OD-3 (decided 2026-10-28, reconstructed):** HF-02's three questions (cookie scope plus DNS, fail closed, port 4322). Recorded as D-48, D-49 and D-50.
 - **OD-4 (decided 2026-10-28, reconstructed):** `staging.panel.meridianconsole.com` keeps an explicit record (in D-48 b, shipped by #240). The exact question text was lost.
-- **Owner actions owed (not decisions):** run the HF-02D Cloudflare checklist (dev, then staging, then prod); after HF-02 deploys, revoke the old zone-wide sessions (HF-02 owner checklist). Confirm that `BangRocket`, who merged #238 to #243 on 2026-10-28, merged them from the owner's main session (D-41); the recovery could not see the yes.
+- **Owner actions owed (not decisions):** run the HF-02D Cloudflare checklist (dev, then staging, then prod); after HF-02 deploys, revoke the old zone-wide sessions (HF-02 owner checklist). Confirm that `BangRocket`, who merged #238 to #243 on 2026-10-28, merged them from the owner's main session (D-41); the recovery could not see the yes. **(2026-11-24: both are deploy gates, not current work; `BangRocket` is Joshua, who may merge campaign PRs per D-52.)**
 
 D-17, D-18 and D-19 were decided 2026-10-26. Wave 4 is split into wave 4 (6 packets) and wave 4b (3 packets); see work-packets.md "Wave 4". Wave 3 and later wait for contract sync 2 (ruling § 4).

@@ -87,6 +87,24 @@ Open after Sprint 2 (each is, or is about to be, an issue; the full list is in t
 | UAT driver | P23 and P28f review advisories (N3, N4 for P28f) | campaign ledger |
 | Docs | The owner corrects the WiX rules in `CLAUDE.md` (the `WindowsBuild` rule, D-S242, and the `Hidden="yes"` secrets rule, D-S245); the old text is wrong for this installer | O1, O2 |
 
+### Status update 2026-11-24 (restart after the 2026-11-03 pause)
+
+Nothing merged between 2026-11-03 and 2026-11-24. This update rebaselines the plan of record against `main` at `a5d408c`. "Merged" below means the PR is on `main`; it is not a "confirmed working" claim. The evidence for each packet is in its campaign ledger.
+
+| Item | Status | Record |
+| ---- | ------ | ------ |
+| Build and test on `main` `a5d408c` | **Run 2026-11-24** (SDK 10.0.301, Windows). Build: 0 errors, 69 warnings. Tests: every project passed except `Dhadgar.Gateway.Tests`, 197 of 199. The 2 failures were a race in the test helper `GatewayCaptureHost.CreateCertificate` (leaf `notAfter` one second past its CA's), not product code; fix in #280. Skips: AppHost 9 (Docker), Servers 2, Agent.Windows 1. Nodes 590, Identity 250, AgentSeam 28 passed | #280 |
+| Sprint 2 (#235) | **Merged** 2026-10-27. The Sprint 2 table above now holds for `main` | #235 |
+| Vertical-slice Waves 1 and 2 | **Merged** (W1 on 2026-10-28; W2 on 2026-11-01: HF-02, VS-06R, VS-08R, VS-09, VS-35, VS-36). Commands are still not end to end: that is Wave 3 | [vertical-slice ledger](analysis/vertical-slice/README.md), [RESUME](analysis/vertical-slice/RESUME.md) |
+| HF-02 / HF-02D owner steps | **Deploy gate.** Trusted origins, the session purge or `BETTER_AUTH_SECRET` rotation, and the Cloudflare change are owed before the next deploy; not needed while nothing is deployed (owner, 2026-11-24) | vertical-slice RESUME |
+| meridian-lab | **In progress on `campaign/meridian-lab`** (last activity 2026-11-02, 566 commits ahead of `main`). The live ledger is on that branch; the `docs/analysis/meridian-lab/` copy on `main` is the 2026-10-27 plan. It continues in parallel with vertical-slice (owner, 2026-11-24) | branch `campaign/meridian-lab` |
+| Lab product fixes on `main` | **Merged** 2026-11-02 to 11-03, outside both campaigns, each on the owner's yes: Nodes EF retry (#256), Nodes bus outbox and not-ready start (#257, D-ML133/D-ML232; also the R-P39-2 outbox row above), binding errors as 400 (#258, D-ML107), Identity `org_id` for client_credentials (#259, D-ML165), CLI exit codes (#260, D-ML166), Nodes list/detail on Contracts DTOs (#261) | PRs #256 to #261 |
+| Open product PRs | #262 (Nodes 415/405 as problem+json). #263 (Nodes migrates before hosted services; **CI build and test failing**, not yet diagnosed) | #262, #263 |
+| Merge authority | Joshua (`BangRocket`) may merge campaign PRs as well as Cady (vertical-slice D-52, amending D-51) | vertical-slice README |
+| .NET 11 | Dependabot majors #275 to #278 stay open; the move gets its own plan | owner, 2026-11-24 |
+
+Restart order: (1) this rebaseline; (2) clear the PR backlog (#262, #263, Dependabot security #269 and #270, then the minor/patch groups); (3) vertical-slice contract sync 2, then Wave 3 (commands end to end); meridian-lab runs alongside.
+
 ## 2. Decisions made 2026-07-26
 
 These were decided explicitly and drive the roadmap below:

@@ -1,28 +1,14 @@
 # RESUME: vertical-slice
 
-**State (2026-10-28, late; Wave 2 in review):**
-- `main` is `101c36d` (Wave 1 and Wave 2 stage 1 merged; SHAs in README). CI green.
-- Decisions run to D-51. D-44 and D-46 are unrecovered (do not reuse). **D-51: Cady (`Cadacious`) merges the campaign PRs; no session merges.**
-- Ledger edits ship in PR #244 (branch `campaign/vertical-slice-ledger-2`, worktree `vertical-slice-ledger2`).
-
-**Wave 2 PRs** (merge order; all `security-review`; each stops at "ready to merge" for Cady):
-
-| Order | PR | Packet | Worktree | State |
-| --- | --- | --- | --- | --- |
-| 1 | #248 | HF-02 | `vertical-slice-hf02` | review ship (p1), security ship (p2) |
-| 2 | - | VS-09 | `vertical-slice-vs09` | security ship (p2); review fix pass 2, then review 3 |
-| 3 | #249 | VS-08R | `vertical-slice-vs08` | security ship (p2); ruling applied, ruling check ship |
-| 4 | #245 | VS-36 | `vertical-slice-vs36` | review ship (p2), security ship (p1); CI green |
-| 5 | #247 | VS-06R | `vertical-slice-vs06` | review ship (p2), security ship (p1) |
-| 6 | #246 | VS-35 | `vertical-slice-vs35` | review ship (p2), security ship (p2) |
-| any | #244 | ledger | `vertical-slice-ledger2` | docs only |
+**State (2026-11-24, restart after a pause; Wave 2 merged):**
+- `main` is `a5d408c` (2026-11-03). Waves 1 and 2 are fully merged (SHAs in README). No campaign work has run since 2026-11-01; `main` has since taken only meridian-lab product fixes (#256 to #261) and Dependabot bumps.
+- Decisions run to D-52. D-44 and D-46 are unrecovered (do not reuse). **D-52: Cady (`Cadacious`) or Joshua (`BangRocket`) merges campaign PRs; no session merges on its own initiative.**
+- No vertical-slice worktrees remain on the owner's machine (checked 2026-11-24; only the main checkout and `restart-rebaseline`).
 
 **Next actions, in order:**
-1. Finish VS-09's review loop; open its PR.
-2. When every Wave 2 PR is green, hand the list to Cady in order. VS-09, VS-08R and VS-06R all edit Nodes `Program.cs`: after each merge, merge `main` into the next PR branch (D-38) and wait for green before Cady merges it.
-3. Owner steps: HF-02D Cloudflare checklist; HF-02 owner steps 2 and 3 (trusted origins set, then `DELETE FROM "session"` or rotate `BETTER_AUTH_SECRET` after deploy).
-4. Remove each packet worktree once its PR merges (copy reports worth keeping to `worknotes/` first).
-5. Contract sync 2 (ruling § 4, plus merging the two `FilteredPagedResponse` types, D-47), then Wave 3.
+1. Contract sync 2 (architect): ruling § 4, merge the two `FilteredPagedResponse` types (D-47), and route the Wave 2 follow-ups below. Check what #261 (Nodes list/detail on Contracts DTOs, outside the campaign) already did for D-47 before speccing it.
+2. Wave 3: VS-12, VS-15 and VS-17 first (they depend only on W2 and contract sync 2), then VS-13, VS-14 and VS-33, then VS-16. VS-12 shrinks per D-37; re-check its scope against Sprint 2's `FileAgentStateStore` and VS-09's signing-key fields.
+3. **Deploy gate, not current work** (owner, 2026-11-24): before the next deploy to dev, staging or prod, run the HF-02D Cloudflare checklist and HF-02 owner steps 2 and 3 (trusted origins set, then `DELETE FROM "session"` or rotate `BETTER_AUTH_SECRET`). Checklist: HF-02 in work-packets.md.
 
 **Follow-ups collected in Wave 2 (route at contract sync 2):**
 - The Gateway's `TenantScoped` policy doesn't compare the path org with the token's `org_id`; confirm every service enforces the org match (VS-35 security-1).
@@ -32,6 +18,7 @@
 - `src/Dhadgar.BetterAuth/CLAUDE.md` still describes the old cookie domain.
 
 **Watch:**
+- meridian-lab runs in parallel on `campaign/meridian-lab` (owner, 2026-11-24); its product fixes land as separate PRs. Before speccing a Wave 3 packet that touches Nodes, Identity, ServiceDefaults or the CLI, check `main` for lab fixes in the same files (#256 to #263).
 - `gh`: `C:\Program Files\GitHub CLI\gh.exe`. Node/npm are installed; refresh PATH from Machine+User in each shell.
 - Never commit the file-mode-noise scripts or restore churn in `src/Agents/*/packages.lock.json`.
 - D-38: merge `main` in, never rebase or force-push. Push every coder commit as soon as it exists.
