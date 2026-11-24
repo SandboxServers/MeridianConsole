@@ -112,14 +112,18 @@ internal static class GatewayCaptureHost
         var caRequest = new CertificateRequest($"CN={issuerCommonName}", caKey, HashAlgorithmName.SHA256);
         caRequest.CertificateExtensions.Add(new X509BasicConstraintsExtension(true, false, 0, true));
         caRequest.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.KeyCertSign, true));
-        using var caCertificate = caRequest.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1));
+        // One clock read for both certificates, and a leaf window strictly inside the CA's.
+        // Reading UtcNow separately let the leaf's notAfter pass the CA's when a second
+        // ticked between the reads, and CertificateRequest.Create rejects that.
+        var now = DateTimeOffset.UtcNow;
+        using var caCertificate = caRequest.CreateSelfSigned(now.AddDays(-1), now.AddDays(1));
 
         using var leafKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         var leafRequest = new CertificateRequest("CN=agent-test", leafKey, HashAlgorithmName.SHA256);
         return leafRequest.Create(
             caCertificate,
-            DateTimeOffset.UtcNow.AddDays(-1),
-            DateTimeOffset.UtcNow.AddDays(1),
+            now.AddHours(-1),
+            now.AddHours(1),
             [0x01, 0x02, 0x03, 0x04]);
     }
 
